@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>WORD500 — Live Word Game</title>
+<meta name="description" content="A live word-guessing game show powered by TikTok LIVE chat." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap"
+  rel="stylesheet"
+/>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app" id="app">
+
+    <header class="topbar">
+      <div class="brand" aria-label="WORD500">
+        <span class="brand-word">WORD</span><span class="brand-num">500</span>
+      </div>
+      <div class="status-pill" id="statusPill">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusLabel">Idle</span>
+      </div>
+    </header>
+
+    <main class="stage" id="stage">
+
+      <section class="round-card" id="roundCard">
+        <div class="round-meta">
+          <span class="category-chip" id="categoryLabel">Pick a difficulty and start the show</span>
+          <span class="round-chip" id="roundLabel"></span>
+        </div>
+
+        <div class="tiles" id="tiles" aria-live="polite"></div>
+
+        <div class="timerTrack" id="timerTrack">
+          <div class="timerFill" id="timerFill"></div>
+        </div>
+
+        <p class="hintText" id="hintText"></p>
+
+        <div class="resultBanner" id="resultBanner" hidden></div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panelTitle">Top 10 leaderboard</h2>
+        <ol class="leaderboard" id="leaderboard">
+          <li class="empty">Scores will show up here once the game starts.</li>
+        </ol>
+      </section>
+
+      <section class="panel">
+        <h2 class="panelTitle">Live comments</h2>
+        <ul class="ticker" id="ticker">
+          <li class="empty">Waiting for chat to arrive…</li>
+        </ul>
+      </section>
+
+      <section class="panel diagPanel">
+        <h2 class="panelTitle">
+          Diagnostics
+          <button id="diagToggle" class="linkBtn" type="button" aria-expanded="true">hide</button>
+        </h2>
+        <div class="diagGrid" id="diagGrid"></div>
+      </section>
+
+    </main>
+
+    <footer class="controls" id="controls">
+      <button class="controlsHandle" id="controlsHandle" type="button" aria-expanded="true" aria-controls="controlsBody">
+        <span>Host controls</span>
+        <span id="handleArrow" class="handleArrow">▾</span>
+      </button>
+
+      <div class="controlsBody" id="controlsBody">
+
+        <div class="row">
+          <input
+            id="tiktokUsername"
+            class="textInput"
+            placeholder="TikTok username (e.g. cool_streamer)"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
+          />
+          <button id="connectBtn" class="btn btnPrimary" type="button">Connect</button>
+        </div>
+
+        <label class="switchRow">
+          <input type="checkbox" id="testModeToggle" />
+          <span class="switchTrack"><span class="switchThumb"></span></span>
+          <span class="switchLabel">Test Mode — try the game with no TikTok connection</span>
+        </label>
+
+        <div class="row">
+          <select id="difficultySelect" class="selectInput">
+            <option value="mixed">Mixed difficulty</option>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+          <button id="startBtn" class="btn btnGold" type="button">Start game</button>
+        </div>
+
+        <div class="row">
+          <button id="skipBtn" class="btn btnGhost" type="button">Skip word</button>
+          <button id="endBtn" class="btn btnGhost" type="button">End game</button>
+        </div>
+
+        <p class="miniStatus" id="miniStatus"></p>
+      </div>
+    </footer>
+
+  </div>
+
+  <script src="/game.js"></script>
+</body>
+</html>
