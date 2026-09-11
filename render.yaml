@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: word500-tiktok-game
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: EULERSTREAM_API_KEY
+        sync: false
