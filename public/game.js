@@ -1,9 +1,7 @@
 // game.js — runs in the browser (host view / display view)
 
 // ------------------------------------------------------------
-// Mobile viewport fix: measure the REAL visible height with JS
-// instead of trusting 100vh, which mobile browsers get wrong
-// once their address bar / TikTok overlay chrome is accounted for.
+// Mobile viewport fix
 // ------------------------------------------------------------
 function setRealViewportHeight() {
   const vh = window.innerHeight * 0.01;
@@ -17,35 +15,66 @@ window.addEventListener("orientationchange", setRealViewportHeight);
 // Element references
 // ------------------------------------------------------------
 const el = {
-  statusPill: document.getElementById("statusPill"),
+  homeBtn: document.getElementById("homeBtn"),
+  menuBtn: document.getElementById("menuBtn"),
   statusDot: document.getElementById("statusDot"),
   statusLabel: document.getElementById("statusLabel"),
-  categoryLabel: document.getElementById("categoryLabel"),
-  roundLabel: document.getElementById("roundLabel"),
-  tiles: document.getElementById("tiles"),
-  timerFill: document.getElementById("timerFill"),
-  hintText: document.getElementById("hintText"),
+  streakValue: document.getElementById("streakValue"),
+  attemptsValue: document.getElementById("attemptsValue"),
+
+  tilesWrap: document.getElementById("tilesWrap"),
+  voteBox: document.getElementById("voteBox"),
+  voteTimer: document.getElementById("voteTimer"),
+  voteList: document.getElementById("voteList"),
   resultBanner: document.getElementById("resultBanner"),
+  resultText: document.getElementById("resultText"),
+  newGameBtn: document.getElementById("newGameBtn"),
+  idleBanner: document.getElementById("idleBanner"),
+  keyboard: document.getElementById("keyboard"),
+
   leaderboard: document.getElementById("leaderboard"),
   ticker: document.getElementById("ticker"),
   diagGrid: document.getElementById("diagGrid"),
   diagToggle: document.getElementById("diagToggle"),
-  diagPanel: document.querySelector(".diagPanel"),
+
   controlsHandle: document.getElementById("controlsHandle"),
   controlsBody: document.getElementById("controlsBody"),
-  handleArrow: document.getElementById("handleArrow"),
   tiktokUsername: document.getElementById("tiktokUsername"),
   connectBtn: document.getElementById("connectBtn"),
   testModeToggle: document.getElementById("testModeToggle"),
-  difficultySelect: document.getElementById("difficultySelect"),
+  wordLengthSelect: document.getElementById("wordLengthSelect"),
+  quickStartSelect: document.getElementById("quickStartSelect"),
   startBtn: document.getElementById("startBtn"),
-  skipBtn: document.getElementById("skipBtn"),
-  endBtn: document.getElementById("endBtn"),
-  miniStatus: document.getElementById("miniStatus")
+  giveUpBtn: document.getElementById("giveUpBtn"),
+  miniStatus: document.getElementById("miniStatus"),
+
+  howToOverlay: document.getElementById("howToOverlay"),
+  closeHowTo: document.getElementById("closeHowTo"),
+  closeHowTo2: document.getElementById("closeHowTo2")
 };
 
+const KEYBOARD_ROWS = [
+  ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
+  ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
+  ["z", "x", "c", "v", "b", "n", "m"]
+];
+
+// Build the keyboard once; we only ever update key CSS classes after this.
+for (const row of KEYBOARD_ROWS) {
+  const rowEl = document.createElement("div");
+  rowEl.className = "keyRow";
+  for (const letter of row) {
+    const key = document.createElement("div");
+    key.className = "key";
+    key.dataset.letter = letter;
+    key.textContent = letter;
+    rowEl.appendChild(key);
+  }
+  el.keyboard.appendChild(rowEl);
+}
+
 // ------------------------------------------------------------
-// Collapsible host-controls drawer (still sticky either way)
+// Collapsible controls + modal
 // ------------------------------------------------------------
 el.controlsHandle.addEventListener("click", () => {
   const expanded = el.controlsHandle.getAttribute("aria-expanded") === "true";
@@ -60,10 +89,17 @@ el.diagToggle.addEventListener("click", () => {
   el.diagGrid.style.display = showing ? "none" : "grid";
 });
 
+function openHowTo() { el.howToOverlay.hidden = false; }
+function closeHowTo() { el.howToOverlay.hidden = true; }
+el.menuBtn.addEventListener("click", openHowTo);
+el.closeHowTo.addEventListener("click", closeHowTo);
+el.closeHowTo2.addEventListener("click", closeHowTo);
+el.howToOverlay.addEventListener("click", (e) => { if (e.target === el.howToOverlay) closeHowTo(); });
+
+el.homeBtn.addEventListener("click", () => send("end_game", {}));
+
 // ------------------------------------------------------------
-// WebSocket connection to OUR OWN server (this is separate from
-// the server's connection to TikTok — this socket just keeps the
-// browser's screen in sync with the game state).
+// WebSocket connection to our own server
 // ------------------------------------------------------------
 let socket = null;
 let reconnectDelay = 1000;
@@ -92,9 +128,7 @@ function connectSocket() {
     reconnectDelay = Math.min(reconnectDelay * 1.6, 10000);
   });
 
-  socket.addEventListener("error", () => {
-    socket.close();
-  });
+  socket.addEventListener("error", () => socket.close());
 }
 connectSocket();
 
@@ -105,20 +139,14 @@ function send(type, payload) {
     setMiniStatus("Not connected to the game server yet — try again in a moment.");
   }
 }
-
-function setMiniStatus(text) {
-  el.miniStatus.textContent = text;
-}
+function setMiniStatus(text) { el.miniStatus.textContent = text; }
 
 // ------------------------------------------------------------
-// Control button wiring
+// Control wiring
 // ------------------------------------------------------------
 el.connectBtn.addEventListener("click", () => {
   const username = el.tiktokUsername.value.trim();
-  if (!username) {
-    setMiniStatus("Type a TikTok username first.");
-    return;
-  }
+  if (!username) { setMiniStatus("Type a TikTok username first."); return; }
   el.testModeToggle.checked = false;
   send("connect_tiktok", { username });
 });
@@ -127,90 +155,117 @@ el.testModeToggle.addEventListener("change", () => {
   send("set_test_mode", { enabled: el.testModeToggle.checked });
 });
 
-el.startBtn.addEventListener("click", () => {
-  send("start_game", { difficulty: el.difficultySelect.value });
-});
-
-el.skipBtn.addEventListener("click", () => send("skip_word", {}));
-el.endBtn.addEventListener("click", () => send("end_game", {}));
+function startGameFromControls() {
+  send("start_game", {
+    wordLength: Number(el.wordLengthSelect.value),
+    quickStartCount: Number(el.quickStartSelect.value)
+  });
+}
+el.startBtn.addEventListener("click", startGameFromControls);
+el.newGameBtn.addEventListener("click", startGameFromControls);
+el.giveUpBtn.addEventListener("click", () => send("give_up", {}));
 
 // ------------------------------------------------------------
 // Rendering
 // ------------------------------------------------------------
 const STATUS_LABELS = {
-  idle: "Idle",
-  connecting: "Connecting…",
-  retrying: "Retrying connection…",
-  live: "LIVE",
-  test_mode: "Test Mode",
-  error: "Connection issue",
-  disconnected: "Disconnected"
+  idle: "Idle", connecting: "Connecting…", retrying: "Retrying connection…",
+  live: "LIVE", test_mode: "Test Mode", error: "Connection issue", disconnected: "Disconnected"
 };
 
+let lastTilesSignature = "";
+
 function render(state) {
-  renderStatus(state.diagnostics);
-  renderRound(state.game);
+  renderStatusStrip(state);
+  renderTiles(state.game);
+  renderVoteBox(state.game);
+  renderBanners(state.game);
+  renderKeyboard(state.game);
   renderLeaderboard(state.leaderboard);
   renderTicker(state.recentComments);
-  renderDiagnostics(state.diagnostics, state.game);
+  renderDiagnostics(state.diagnostics);
 }
 
-function renderStatus(diag) {
-  const status = diag.connectionStatus || "idle";
+function renderStatusStrip(state) {
+  const status = state.diagnostics.connectionStatus || "idle";
   el.statusDot.className = `status-dot ${status}`;
   el.statusLabel.textContent = STATUS_LABELS[status] || status;
+  el.streakValue.textContent = state.game.streak;
+  el.attemptsValue.textContent = state.game.status === "idle" ? "—" : state.game.maxAttempts != null
+    ? `${state.game.attemptsLeft} / ${state.game.maxAttempts}`
+    : state.game.attemptsLeft;
 }
 
-function renderRound(g) {
-  // Category / round chip
-  if (g.status === "idle") {
-    el.categoryLabel.textContent = "Pick a difficulty and start the show";
-  } else if (g.category) {
-    el.categoryLabel.textContent = `Category: ${g.category}`;
-  } else {
-    el.categoryLabel.textContent = "Get ready…";
-  }
-  el.roundLabel.textContent = g.roundNumber ? `Round ${g.roundNumber}` : "";
+function renderTiles(g) {
+  const signature = `${g.status}|${g.wordLength}|${g.maxAttempts}|${g.guesses.length}`;
+  if (signature === lastTilesSignature) return; // avoid replaying flip animation every tick
+  lastTilesSignature = signature;
 
-  // Letter tiles
-  el.tiles.innerHTML = "";
-  const word = g.maskedWord || "";
-  if (word.length === 0 && g.status !== "idle") {
-    // no-op, nothing to show yet
-  }
-  for (const ch of word) {
-    const tile = document.createElement("div");
-    tile.className = "tile" + (ch !== "_" ? " revealed" : "");
-    tile.textContent = ch !== "_" ? ch : "";
-    el.tiles.appendChild(tile);
-  }
+  el.tilesWrap.innerHTML = "";
+  const rowsToShow = g.status === "idle" ? 0 : g.maxAttempts;
 
-  // Timer bar
-  if (g.status === "live" && g.roundSeconds > 0) {
-    const fraction = Math.min(1, g.secondsElapsed / g.roundSeconds);
-    el.timerFill.style.width = `${(1 - fraction) * 100}%`;
-    el.timerFill.classList.toggle("urgent", fraction > 0.75);
-  } else {
-    el.timerFill.style.width = g.status === "idle" ? "0%" : "100%";
-    el.timerFill.classList.remove("urgent");
-  }
+  for (let r = 0; r < rowsToShow; r++) {
+    const rowEl = document.createElement("div");
+    rowEl.className = "tileRow";
+    const guess = g.guesses[r];
 
-  // Hint text
-  el.hintText.textContent = g.hintText ? `Hint: ${g.hintText}` : "";
-
-  // Result banner
-  if (g.lastRoundResult) {
-    el.resultBanner.hidden = false;
-    if (g.lastRoundResult.winner) {
-      el.resultBanner.className = "resultBanner win";
-      el.resultBanner.textContent = `🎉 ${g.lastRoundResult.winner} guessed "${g.lastRoundResult.word}" for ${g.lastRoundResult.score} points!`;
-    } else {
-      el.resultBanner.className = "resultBanner timeout";
-      el.resultBanner.textContent = `⏱ Time's up! The word was "${g.lastRoundResult.word}".`;
+    for (let c = 0; c < g.wordLength; c++) {
+      const tile = document.createElement("div");
+      if (guess) {
+        tile.className = `tile ${guess.feedback[c]}`;
+        tile.textContent = guess.word[c];
+      } else {
+        tile.className = "tile";
+        if (r === g.guesses.length && g.status === "live") tile.classList.add("current");
+      }
+      rowEl.appendChild(tile);
     }
-  } else {
-    el.resultBanner.hidden = true;
+    el.tilesWrap.appendChild(rowEl);
   }
+}
+
+function renderVoteBox(g) {
+  const showVoteBox = g.status === "live";
+  el.voteBox.hidden = !showVoteBox;
+  if (!showVoteBox) return;
+
+  el.voteTimer.textContent = `${g.secondsLeftInWindow}s`;
+
+  if (!g.topVotes || g.topVotes.length === 0) {
+    el.voteList.className = "voteList empty";
+    el.voteList.innerHTML = `<li>No valid guesses yet this round — type a ${g.wordLength}-letter word in chat!</li>`;
+    return;
+  }
+  el.voteList.className = "voteList";
+  el.voteList.innerHTML = g.topVotes
+    .map((v) => `<li><span class="voteWord">${escapeHtml(v.word)}</span><span class="voteCount">${v.count} vote${v.count === 1 ? "" : "s"}</span></li>`)
+    .join("");
+}
+
+function renderBanners(g) {
+  el.idleBanner.hidden = g.status !== "idle";
+  el.resultBanner.hidden = g.status !== "won" && g.status !== "lost";
+
+  if (g.status === "won") {
+    const lastGuess = g.guesses[g.guesses.length - 1];
+    el.resultBanner.className = "resultBanner win";
+    el.resultText.textContent = `🎉 Chat got it! The word was "${(lastGuess?.word || "").toUpperCase()}".`;
+  } else if (g.status === "lost") {
+    el.resultBanner.className = "resultBanner lost";
+    el.resultText.textContent = `⏱ Out of attempts. The word was "${(g.secretWord || "").toUpperCase()}".`;
+  }
+}
+
+function renderKeyboard(g) {
+  const showKeyboard = g.status === "live";
+  el.keyboard.style.display = showKeyboard ? "flex" : "none";
+  if (!showKeyboard) return;
+  const keys = el.keyboard.querySelectorAll(".key");
+  keys.forEach((key) => {
+    const letter = key.dataset.letter;
+    const status = g.keyboardState?.[letter];
+    key.className = "key" + (status ? ` ${status}` : "");
+  });
 }
 
 function renderLeaderboard(list) {
@@ -219,14 +274,12 @@ function renderLeaderboard(list) {
     return;
   }
   el.leaderboard.innerHTML = list
-    .map(
-      (row, i) => `
+    .map((row, i) => `
       <li>
         <span class="rank">#${i + 1}</span>
         <span class="lbName">${escapeHtml(row.username)}</span>
         <span class="lbScore">${row.score}</span>
-      </li>`
-    )
+      </li>`)
     .join("");
 }
 
@@ -236,37 +289,34 @@ function renderTicker(comments) {
     return;
   }
   el.ticker.innerHTML = comments
-    .map(
-      (c) => `<li><span class="tkUser">${escapeHtml(c.username)}</span><span class="tkText">${escapeHtml(c.text)}</span></li>`
-    )
+    .map((c) => `<li><span class="tkUser">${escapeHtml(c.username)}</span><span class="tkText">${escapeHtml(c.text)}</span></li>`)
     .join("");
 }
 
-function renderDiagnostics(diag, g) {
+function renderDiagnostics(diag) {
+  const dictLabel = diag.dictionaryLoading
+    ? "Loading…"
+    : `${diag.dictionaryWordCount.toLocaleString()} words (${diag.dictionarySource === "full" ? "full list" : "fallback list"})`;
+  const dictTone = diag.dictionaryLoading ? "warn" : diag.dictionarySource === "full" ? "good" : "bad";
+
   const rows = [
     ["Raw events received", diag.rawEventCount, "good"],
-    [
-      "Last received",
-      diag.lastReceivedUser ? `${diag.lastReceivedUser}: ${diag.lastReceivedText || "(empty)"}` : "—",
-      null
-    ],
+    ["Last received", diag.lastReceivedUser ? `${diag.lastReceivedUser}: ${diag.lastReceivedText || "(empty)"}` : "—", null],
     ["Connection status", STATUS_LABELS[diag.connectionStatus] || diag.connectionStatus, statusTone(diag.connectionStatus)],
     ["Signing key set up?", diag.signKeyConfigured ? "Yes" : "No — see setup guide", diag.signKeyConfigured ? "good" : "bad"],
+    ["Word dictionary", dictLabel, dictTone],
     ["Retry attempts", `${diag.retryAttempt} / ${diag.maxRetries}`, diag.retryAttempt > 0 ? "warn" : null],
     ["Last message", diag.lastErrorMessage || "—", diag.lastErrorMessage ? "bad" : null]
   ];
 
   el.diagGrid.innerHTML = rows
-    .map(
-      ([key, val, tone]) => `
+    .map(([key, val, tone]) => `
       <div class="diagRow">
         <span class="diagKey">${escapeHtml(key)}</span>
         <span class="diagVal ${tone || ""}">${escapeHtml(String(val))}</span>
-      </div>`
-    )
+      </div>`)
     .join("");
 
-  // Keep the Connect button and username field in sync with reality.
   const busy = diag.connectionStatus === "connecting" || diag.connectionStatus === "retrying";
   el.connectBtn.disabled = busy;
   el.connectBtn.textContent = busy ? "Connecting…" : "Connect";
@@ -280,9 +330,5 @@ function statusTone(status) {
 }
 
 function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }

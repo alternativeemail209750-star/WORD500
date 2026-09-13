@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <title>WORD500 — Live Word Game</title>
-<meta name="description" content="A live word-guessing game show powered by TikTok LIVE chat." />
+<meta name="description" content="A live Wordle-style word game powered by TikTok LIVE chat." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link
@@ -17,32 +17,58 @@
   <div class="app" id="app">
 
     <header class="topbar">
+      <button class="iconBtn" id="homeBtn" type="button" aria-label="Home / reset">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 11.5 12 4l9 7.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+
       <div class="brand" aria-label="WORD500">
         <span class="brand-word">WORD</span><span class="brand-num">500</span>
       </div>
-      <div class="status-pill" id="statusPill">
+
+      <button class="iconBtn" id="menuBtn" type="button" aria-label="How to play">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </header>
+
+    <div class="status-strip">
+      <span class="status-pill" id="statusPill">
         <span class="status-dot" id="statusDot"></span>
         <span id="statusLabel">Idle</span>
-      </div>
-    </header>
+      </span>
+      <span class="streak-pill" id="streakPill">🔥 <span id="streakValue">0</span></span>
+      <span class="attempts-pill" id="attemptsPill">Attempts left: <span id="attemptsValue">—</span></span>
+    </div>
 
     <main class="stage" id="stage">
 
       <section class="round-card" id="roundCard">
-        <div class="round-meta">
-          <span class="category-chip" id="categoryLabel">Pick a difficulty and start the show</span>
-          <span class="round-chip" id="roundLabel"></span>
+
+        <div class="tilesWrap" id="tilesWrap"></div>
+
+        <div class="voteBox" id="voteBox" hidden>
+          <div class="voteHeader">
+            <span>Chat is voting for the next guess…</span>
+            <span class="voteTimer" id="voteTimer">6s</span>
+          </div>
+          <ul class="voteList" id="voteList"></ul>
+          <p class="voteHint">Type a real word of the right length in TikTok chat to vote for it.</p>
         </div>
 
-        <div class="tiles" id="tiles" aria-live="polite"></div>
-
-        <div class="timerTrack" id="timerTrack">
-          <div class="timerFill" id="timerFill"></div>
+        <div class="resultBanner" id="resultBanner" hidden>
+          <p id="resultText"></p>
+          <button class="btn btnGold" id="newGameBtn" type="button">New game</button>
         </div>
 
-        <p class="hintText" id="hintText"></p>
+        <div class="idleBanner" id="idleBanner">
+          <p>Pick a word length below and tap <strong>Start game</strong> to begin.</p>
+        </div>
 
-        <div class="resultBanner" id="resultBanner" hidden></div>
+        <div class="keyboard" id="keyboard"></div>
       </section>
 
       <section class="panel">
@@ -96,24 +122,48 @@
         </label>
 
         <div class="row">
-          <select id="difficultySelect" class="selectInput">
-            <option value="mixed">Mixed difficulty</option>
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
+          <select id="wordLengthSelect" class="selectInput">
+            <option value="4">Easy — 4 letters</option>
+            <option value="5" selected>Medium — 5 letters</option>
+            <option value="6">Hard — 6 letters</option>
           </select>
-          <button id="startBtn" class="btn btnGold" type="button">Start game</button>
+          <select id="quickStartSelect" class="selectInput selectNarrow">
+            <option value="0">No quick start</option>
+            <option value="1">+1 free guess</option>
+            <option value="2">+2 free guesses</option>
+            <option value="3">+3 free guesses</option>
+          </select>
         </div>
 
         <div class="row">
-          <button id="skipBtn" class="btn btnGhost" type="button">Skip word</button>
-          <button id="endBtn" class="btn btnGhost" type="button">End game</button>
+          <button id="startBtn" class="btn btnGold" type="button">Start game</button>
+          <button id="giveUpBtn" class="btn btnGhost" type="button">Give up</button>
         </div>
 
         <p class="miniStatus" id="miniStatus"></p>
       </div>
     </footer>
 
+  </div>
+
+  <div class="modalOverlay" id="howToOverlay" hidden>
+    <div class="modal">
+      <div class="modalHead">
+        <h3>How to play WORD500</h3>
+        <button class="iconBtn" id="closeHowTo" type="button" aria-label="Close">✕</button>
+      </div>
+      <ul class="howToList">
+        <li>The game picks a hidden word. Its length is shown by the row of blank tiles.</li>
+        <li>Everyone watching the TikTok LIVE types their guess directly in chat — a real word of the same length.</li>
+        <li>Every few seconds, the <strong>most-typed</strong> valid word becomes the audience's official guess for that turn.</li>
+        <li><span class="legendTile correct">A</span> = right letter, right spot.</li>
+        <li><span class="legendTile present">B</span> = right letter, wrong spot.</li>
+        <li><span class="legendTile absent">C</span> = letter isn't in the word.</li>
+        <li>The keyboard on screen colors itself in as clues come in, to help everyone plan their next guess.</li>
+        <li>The audience shares one pool of 15 attempts per word — guess it before time runs out!</li>
+      </ul>
+      <button class="btn btnGold" id="closeHowTo2" type="button">Got it</button>
+    </div>
   </div>
 
   <script src="/game.js"></script>

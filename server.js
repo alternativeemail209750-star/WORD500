@@ -1,17 +1,24 @@
 // server.js
-// WORD500 - a live word-guessing game show driven by TikTok LIVE chat.
+// WORD500 - a live Wordle-style word game driven by TikTok LIVE chat.
 //
-// Read this file top-to-bottom once and you'll understand the whole app:
-//   1. Safety net (crash protection)              -> SAFETY NET
-//   2. Turning any raw chat event into {user,text} -> FIELD EXTRACTION
-//   3. The game itself (rounds, scoring, hints)    -> GAME STATE
-//   4. Talking to TikTok (connect + retry + test)  -> TIKTOK CONNECTION
-//   5. Talking to the browser (WebSocket)          -> WEBSOCKET SERVER
+// How a round works, in plain terms:
+//   - The server picks a secret word and shows blank tiles for it.
+//   - Every few seconds is a "voting window": any TikTok chat comment
+//     that's a real word of the right length counts as a vote for that
+//     word. When the window ends, the MOST-VOTED word becomes the
+//     audience's official guess for that turn.
+//   - That guess gets scored like classic Wordle (green/yellow/red),
+//     the tiles and keyboard update, and one attempt is used up.
+//   - Repeat until the audience guesses the word or runs out of
+//     attempts.
 //
-// You should never need to edit this file to run the game - everything
-// you're likely to want to change (words, colors, timings) lives in
-// words.js or public/style.css. This file is only here so you (or a
-// future helper) can see exactly how it works.
+// Sections in this file:
+//   1. Safety net (crash protection)                -> SAFETY NET
+//   2. Turning any raw chat event into {user,text}   -> FIELD EXTRACTION
+//   3. Wordle scoring + keyboard state               -> SCORING
+//   4. The game itself (voting windows, streaks)     -> GAME STATE
+//   5. Talking to TikTok (connect + retry + test)    -> TIKTOK CONNECTION
+//   6. Talking to the browser (WebSocket)            -> WEBSOCKET SERVER
 
 import "dotenv/config";
 import express from "express";
@@ -20,7 +27,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { WebSocketServer } from "ws";
 import { TikTokLiveConnection, WebcastEvent, SignConfig } from "tiktok-live-connector";
-import { ALL_WORDS, WORD_BANK } from "./words.js";
+import { ANSWER_WORDS } from "./answers.js";
+import { dictionaryState, loadDictionary, isValidGuessWord, getWordsOfLength } from "./dictionary.js";
 
 // ============================================================
 // SAFETY NET - one bad message must never take the whole app down
@@ -33,8 +41,6 @@ process.on("unhandledRejection", (reason) => {
 });
 
 function safely(label, fn) {
-  // Wraps any event handler so a crash inside it only logs an error
-  // instead of bringing down the game for everyone else watching.
   return (...args) => {
     try {
       fn(...args);
@@ -47,13 +53,6 @@ function safely(label, fn) {
 // ============================================================
 // FIELD EXTRACTION - never trust one hardcoded field name
 // ============================================================
-// tiktok-live-connector is a reverse-engineered library. TikTok can
-// change the shape of its data at any time, and library versions drift
-// from their own docs. Instead of reading data.comment directly, we
-// walk a list of every plausible field name/path and use the first one
-// that actually has a value. If TikTok changes shape again, add a new
-// path to these lists - you don't need to change any other code.
-
 function getByPath(obj, dottedPath) {
   const parts = dottedPath.split(".");
   let current = obj;
@@ -78,28 +77,10 @@ function extractField(raw, candidatePaths, fallback) {
 }
 
 const USERNAME_PATHS = [
-  "uniqueId",
-  "uniqueid",
-  "user.uniqueId",
-  "user.uniqueid",
-  "user.username",
-  "username",
-  "nickname",
-  "user.nickname",
-  "author.uniqueId",
-  "author.nickname",
-  "data.uniqueId"
+  "uniqueId", "uniqueid", "user.uniqueId", "user.uniqueid", "user.username",
+  "username", "nickname", "user.nickname", "author.uniqueId", "author.nickname", "data.uniqueId"
 ];
-
-const MESSAGE_PATHS = [
-  "comment",
-  "message",
-  "content",
-  "text",
-  "msg",
-  "data.comment",
-  "data.message"
-];
+const MESSAGE_PATHS = ["comment", "message", "content", "text", "msg", "data.comment", "data.message"];
 
 function extractChatFields(raw) {
   const username = String(extractField(raw, USERNAME_PATHS, "viewer"));
@@ -107,8 +88,6 @@ function extractChatFields(raw) {
   return { username, text };
 }
 
-// Turns "  Tiger!! " into "tiger" so guesses match even with punctuation,
-// emoji-adjacent spaces, or stray capitalization from mobile keyboards.
 function normalizeGuess(text) {
   return String(text)
     .toLowerCase()
@@ -118,144 +97,176 @@ function normalizeGuess(text) {
 }
 
 // ============================================================
-// GAME STATE - rounds, scoring, hints
+// SCORING - classic Wordle-style feedback (handles repeated letters)
 // ============================================================
-const ROUND_SECONDS = 45;
-const BASE_SCORE = 500;
-const MIN_SCORE = 50;
-const NEXT_ROUND_DELAY_MS = 5000;
-const HINT_SCHEDULE_SECONDS = [15, 30, 40]; // fun fact, first letter, extra letter
+function scoreGuess(guess, answer) {
+  const n = answer.length;
+  const result = new Array(n).fill("absent");
+  const guessLetters = guess.split("");
+  const answerLetters = answer.split("");
+  const remaining = {};
+  for (const letter of answerLetters) remaining[letter] = (remaining[letter] || 0) + 1;
+
+  for (let i = 0; i < n; i++) {
+    if (guessLetters[i] === answerLetters[i]) {
+      result[i] = "correct";
+      remaining[guessLetters[i]] -= 1;
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    if (result[i] === "correct") continue;
+    const letter = guessLetters[i];
+    if (remaining[letter] > 0) {
+      result[i] = "present";
+      remaining[letter] -= 1;
+    }
+  }
+  return result;
+}
+
+const STATUS_RANK = { unknown: 0, absent: 1, present: 2, correct: 3 };
+function updateKeyboardState(keyboardState, letters, feedback) {
+  for (let i = 0; i < letters.length; i++) {
+    const letter = letters[i];
+    const incoming = feedback[i];
+    const current = keyboardState[letter] || "unknown";
+    if (STATUS_RANK[incoming] > STATUS_RANK[current]) keyboardState[letter] = incoming;
+  }
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+const MAX_ATTEMPTS = 15;
+const VOTE_WINDOW_SECONDS = 6;
 
 const game = {
-  status: "idle", // idle | countdown | live | round_end | finished
-  difficulty: "mixed", // easy | medium | hard | mixed
-  currentWord: null, // { word, category, hint, difficulty }
-  revealedLetters: [], // booleans, one per letter of currentWord.word
-  hintsRevealed: 0,
-  roundStartedAt: null,
-  roundNumber: 0,
-  lastRoundResult: null, // { winner, word, score } | { timedOut, word }
-  scores: new Map(), // username -> score
-  recentComments: [], // last N raw comments, newest first
-  usedWords: new Set()
+  status: "idle", // idle | live | won | lost
+  wordLength: 5,
+  secretWord: null,
+  guesses: [], // { word, feedback, caller }
+  attemptsLeft: MAX_ATTEMPTS,
+  maxAttempts: MAX_ATTEMPTS,
+  streak: 0,
+  keyboardState: {}, // letter -> "correct" | "present" | "absent"
+  voteTally: new Map(), // normalizedWord -> { count, firstUser, firstAt }
+  windowEndsAt: null,
+  recentComments: [],
+  usedWords: new Set(),
+  scores: new Map() // username -> points
 };
 
-function pickWord(difficulty) {
-  const pool = difficulty === "mixed" ? ALL_WORDS : WORD_BANK[difficulty] || ALL_WORDS;
-  const unused = pool.filter((w) => !game.usedWords.has(w.word));
-  const list = unused.length > 0 ? unused : pool; // reshuffle once exhausted
+function pickAnswer(wordLength) {
+  const pool = ANSWER_WORDS[wordLength] || ANSWER_WORDS[5];
+  const unused = pool.filter((w) => !game.usedWords.has(w));
+  const list = unused.length > 0 ? unused : pool;
   if (unused.length === 0) game.usedWords.clear();
   const pick = list[Math.floor(Math.random() * list.length)];
-  game.usedWords.add(pick.word);
+  game.usedWords.add(pick);
   return pick;
 }
 
-function startRound() {
-  const word = pickWord(game.difficulty);
-  game.currentWord = word;
-  game.revealedLetters = word.word.split("").map(() => false);
-  game.hintsRevealed = 0;
-  game.roundStartedAt = Date.now();
-  game.roundNumber += 1;
+function processGuess(word, caller) {
+  const feedback = scoreGuess(word, game.secretWord);
+  game.guesses.push({ word, feedback, caller });
+  updateKeyboardState(game.keyboardState, word.split(""), feedback);
+  game.attemptsLeft -= 1;
+
+  const isRealPlayer = caller && caller !== "(auto)";
+  const prior = game.scores.get(caller) || 0;
+
+  if (word === game.secretWord) {
+    if (isRealPlayer) game.scores.set(caller, prior + 100);
+    game.status = "won";
+    game.streak += 1;
+  } else {
+    if (isRealPlayer) game.scores.set(caller, prior + 10);
+    if (game.attemptsLeft <= 0) {
+      game.status = "lost";
+      game.streak = 0;
+    }
+  }
+}
+
+function startGame(wordLength, quickStartCount = 0) {
+  const length = [4, 5, 6].includes(wordLength) ? wordLength : 5;
+  game.wordLength = length;
+  game.secretWord = pickAnswer(length);
+  game.guesses = [];
+  game.attemptsLeft = MAX_ATTEMPTS;
+  game.maxAttempts = MAX_ATTEMPTS;
+  game.keyboardState = {};
+  game.voteTally.clear();
   game.status = "live";
-  game.lastRoundResult = null;
+
+  if (quickStartCount > 0) {
+    const candidates = getWordsOfLength(length).filter((w) => w !== game.secretWord);
+    for (let i = 0; i < quickStartCount && candidates.length > 0 && game.status === "live"; i++) {
+      const idx = Math.floor(Math.random() * candidates.length);
+      const word = candidates.splice(idx, 1)[0];
+      processGuess(word, "(auto)");
+    }
+  }
+
+  if (game.status === "live") {
+    game.windowEndsAt = Date.now() + VOTE_WINDOW_SECONDS * 1000;
+  }
+  broadcastState();
+}
+
+function giveUp() {
+  if (game.status !== "live") return;
+  game.status = "lost";
+  game.streak = 0;
+  game.windowEndsAt = null;
   broadcastState();
 }
 
 function endGame() {
-  clearInterval(roundTimer);
   game.status = "idle";
-  game.currentWord = null;
-  game.roundStartedAt = null;
-  game.lastRoundResult = null;
+  game.secretWord = null;
+  game.guesses = [];
+  game.voteTally.clear();
+  game.windowEndsAt = null;
   broadcastState();
 }
 
-function revealLetterHint(count) {
-  const letters = game.currentWord.word.split("");
-  let revealed = 0;
-  const positions = letters
-    .map((_, i) => i)
-    .filter((i) => !game.revealedLetters[i]);
-  // Always reveal the first letter first, then randomize the rest.
-  positions.sort((a, b) => {
-    if (a === 0) return -1;
-    if (b === 0) return 1;
-    return Math.random() - 0.5;
-  });
-  for (const pos of positions) {
-    if (revealed >= count) break;
-    game.revealedLetters[pos] = true;
-    revealed++;
+function addVote(username, normalizedWord) {
+  if (game.status !== "live") return;
+  if (normalizedWord.length !== game.wordLength) return;
+  if (!isValidGuessWord(normalizedWord)) return;
+  const entry = game.voteTally.get(normalizedWord);
+  if (entry) {
+    entry.count += 1;
+  } else {
+    game.voteTally.set(normalizedWord, { count: 1, firstUser: username, firstAt: Date.now() });
   }
 }
 
-function computeScore(elapsedSeconds) {
-  const remainingFraction = Math.max(0, (ROUND_SECONDS - elapsedSeconds) / ROUND_SECONDS);
-  const timeScore = Math.round(BASE_SCORE * remainingFraction);
-  const penalty = game.hintsRevealed * 50;
-  return Math.max(MIN_SCORE, timeScore - penalty);
-}
-
-function awardWin(username) {
-  const elapsedSeconds = (Date.now() - game.roundStartedAt) / 1000;
-  const score = computeScore(elapsedSeconds);
-  const prior = game.scores.get(username) || 0;
-  game.scores.set(username, prior + score);
-  game.lastRoundResult = { winner: username, word: game.currentWord.word, score };
-  game.revealedLetters = game.currentWord.word.split("").map(() => true);
-  game.status = "round_end";
-  broadcastState();
-  setTimeout(() => {
-    if (game.status === "round_end") startRound();
-  }, NEXT_ROUND_DELAY_MS);
-}
-
-function timeoutRound() {
-  game.lastRoundResult = { timedOut: true, word: game.currentWord.word };
-  game.revealedLetters = game.currentWord.word.split("").map(() => true);
-  game.status = "round_end";
-  broadcastState();
-  setTimeout(() => {
-    if (game.status === "round_end") startRound();
-  }, NEXT_ROUND_DELAY_MS);
-}
-
-// Ticks once a second while a round is live: reveals hints on schedule
-// and ends the round if time runs out.
-let roundTimer = setInterval(
-  safely("round-timer-tick", () => {
-    if (game.status !== "live" || !game.roundStartedAt) return;
-    const elapsed = Math.floor((Date.now() - game.roundStartedAt) / 1000);
-
-    const hintsThatShouldBeRevealed = HINT_SCHEDULE_SECONDS.filter((t) => elapsed >= t).length;
-    if (hintsThatShouldBeRevealed > game.hintsRevealed) {
-      // Hint index 0 = the fun-fact hint text, indices 1+ = letter reveals.
-      const newlyRevealed = hintsThatShouldBeRevealed - game.hintsRevealed;
-      const letterHintsBefore = Math.max(0, game.hintsRevealed - 1);
-      const letterHintsAfter = Math.max(0, hintsThatShouldBeRevealed - 1);
-      if (letterHintsAfter > letterHintsBefore) {
-        revealLetterHint(letterHintsAfter - letterHintsBefore);
-      }
-      game.hintsRevealed = hintsThatShouldBeRevealed;
-    }
-
-    if (elapsed >= ROUND_SECONDS) {
-      timeoutRound();
-    } else {
-      broadcastState(true); // lightweight tick, just for the countdown display
-    }
-  }),
-  1000
-);
-
-function checkGuess(username, rawText) {
-  if (game.status !== "live" || !game.currentWord) return;
-  const guess = normalizeGuess(rawText);
-  if (guess.length === 0) return;
-  if (guess === game.currentWord.word) {
-    awardWin(username);
+function resolveVoteWindow() {
+  if (game.voteTally.size === 0) {
+    game.windowEndsAt = Date.now() + VOTE_WINDOW_SECONDS * 1000;
+    broadcastState();
+    return;
   }
+  let winner = null;
+  for (const [word, data] of game.voteTally.entries()) {
+    if (
+      !winner ||
+      data.count > winner.data.count ||
+      (data.count === winner.data.count && data.firstAt < winner.data.firstAt)
+    ) {
+      winner = { word, data };
+    }
+  }
+  game.voteTally.clear();
+  processGuess(winner.word, winner.data.firstUser);
+  if (game.status === "live") {
+    game.windowEndsAt = Date.now() + VOTE_WINDOW_SECONDS * 1000;
+  } else {
+    game.windowEndsAt = null;
+  }
+  broadcastState();
 }
 
 function getLeaderboard() {
@@ -265,23 +276,34 @@ function getLeaderboard() {
     .map(([username, score]) => ({ username, score }));
 }
 
-function getMaskedWord() {
-  if (!game.currentWord) return null;
-  return game.currentWord.word
-    .split("")
-    .map((letter, i) => (game.revealedLetters[i] ? letter : "_"))
-    .join("");
+function getTopVotes() {
+  return [...game.voteTally.entries()]
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 3)
+    .map(([word, data]) => ({ word, count: data.count }));
 }
 
+setInterval(
+  safely("game-tick", () => {
+    if (game.status !== "live" || !game.windowEndsAt) return;
+    if (Date.now() >= game.windowEndsAt) {
+      resolveVoteWindow();
+    } else {
+      broadcastState(true);
+    }
+  }),
+  1000
+);
+
 // ============================================================
-// DIAGNOSTICS - always-on, on-screen proof that things are working
+// DIAGNOSTICS
 // ============================================================
 const diagnostics = {
   rawEventCount: 0,
   lastReceivedUser: null,
   lastReceivedText: null,
   lastReceivedAt: null,
-  connectionStatus: "idle", // idle | connecting | retrying | live | test_mode | error | disconnected
+  connectionStatus: "idle",
   retryAttempt: 0,
   maxRetries: 3,
   lastErrorMessage: null,
@@ -299,7 +321,7 @@ function handleIncomingRawEvent(raw) {
   game.recentComments.unshift({ username, text, at: Date.now() });
   if (game.recentComments.length > 30) game.recentComments.length = 30;
 
-  checkGuess(username, text);
+  addVote(username, normalizeGuess(text));
   broadcastState();
 }
 
@@ -351,10 +373,7 @@ async function connectToTikTok(username) {
         signApiKey: process.env.EULERSTREAM_API_KEY
       });
 
-      connection.on(
-        WebcastEvent.CHAT,
-        safely("chat-event", (data) => handleIncomingRawEvent(data))
-      );
+      connection.on(WebcastEvent.CHAT, safely("chat-event", (data) => handleIncomingRawEvent(data)));
       connection.on(
         WebcastEvent.DISCONNECTED,
         safely("disconnected-event", () => {
@@ -414,8 +433,10 @@ function describeConnectError(err) {
   return "Couldn't connect to TikTok LIVE after several tries. You can try again anytime.";
 }
 
-// ---- Test Mode: fake events, deliberately shaped a few different ways ----
-const FAKE_USERNAMES = ["comet_fan", "wordwiz99", "livstream_lu", "night.owl", "byte_buddy", "quiz.queen", "pixel_pete"];
+// ---- Test Mode: fake events, shaped a few different ways on purpose ----
+const FAKE_USERNAMES = [
+  "comet_fan", "wordwiz99", "livstream_lu", "night.owl", "byte_buddy", "quiz.queen", "pixel_pete"
+];
 const FAKE_JUNK_WORDS = ["hi", "lol", "go team", "so fun", "love this game", "hmm", "wait what"];
 
 function startTestMode() {
@@ -428,25 +449,27 @@ function startTestMode() {
   testModeTimer = setInterval(
     safely("test-mode-tick", () => {
       const username = FAKE_USERNAMES[Math.floor(Math.random() * FAKE_USERNAMES.length)];
-      const shouldGuessCorrectly = game.currentWord && Math.random() < 0.12;
-      const text = shouldGuessCorrectly
-        ? game.currentWord.word
-        : FAKE_JUNK_WORDS[Math.floor(Math.random() * FAKE_JUNK_WORDS.length)];
+      const roll = Math.random();
+      let text;
 
-      // Alternate the raw shape on purpose, to prove the fallback-chain
-      // extraction keeps working even if the "library shape" changes.
+      if (game.status === "live" && game.secretWord && roll < 0.06) {
+        text = game.secretWord;
+      } else if (game.status === "live" && roll < 0.4) {
+        const pool = getWordsOfLength(game.wordLength);
+        text = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : FAKE_JUNK_WORDS[0];
+      } else {
+        text = FAKE_JUNK_WORDS[Math.floor(Math.random() * FAKE_JUNK_WORDS.length)];
+      }
+
       const shapeVariant = Math.floor(Math.random() * 3);
       let fakeRaw;
-      if (shapeVariant === 0) {
-        fakeRaw = { uniqueId: username, comment: text };
-      } else if (shapeVariant === 1) {
-        fakeRaw = { user: { uniqueId: username, nickname: username }, message: text };
-      } else {
-        fakeRaw = { nickname: username, content: text };
-      }
+      if (shapeVariant === 0) fakeRaw = { uniqueId: username, comment: text };
+      else if (shapeVariant === 1) fakeRaw = { user: { uniqueId: username, nickname: username }, message: text };
+      else fakeRaw = { nickname: username, content: text };
+
       handleIncomingRawEvent(fakeRaw);
     }),
-    1400
+    1000
   );
 }
 
@@ -460,7 +483,7 @@ function stopTestMode() {
 }
 
 // ============================================================
-// WEBSOCKET SERVER - talking to the host's browser
+// WEBSOCKET SERVER
 // ============================================================
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -470,23 +493,30 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 function buildStatePayload() {
+  const now = Date.now();
   return {
     game: {
       status: game.status,
-      difficulty: game.difficulty,
-      roundNumber: game.roundNumber,
-      maskedWord: getMaskedWord(),
-      wordLength: game.currentWord ? game.currentWord.word.length : 0,
-      category: game.currentWord ? game.currentWord.category : null,
-      hintText: game.hintsRevealed >= 1 && game.currentWord ? game.currentWord.hint : null,
-      hintsRevealed: game.hintsRevealed,
-      secondsElapsed: game.roundStartedAt ? Math.floor((Date.now() - game.roundStartedAt) / 1000) : 0,
-      roundSeconds: ROUND_SECONDS,
-      lastRoundResult: game.lastRoundResult
+      wordLength: game.wordLength,
+      secretWord: game.status === "lost" ? game.secretWord : null,
+      guesses: game.guesses,
+      attemptsLeft: game.attemptsLeft,
+      maxAttempts: game.maxAttempts,
+      streak: game.streak,
+      keyboardState: game.keyboardState,
+      secondsLeftInWindow:
+        game.status === "live" && game.windowEndsAt ? Math.max(0, Math.ceil((game.windowEndsAt - now) / 1000)) : 0,
+      voteWindowSeconds: VOTE_WINDOW_SECONDS,
+      topVotes: getTopVotes()
     },
     leaderboard: getLeaderboard(),
     recentComments: game.recentComments.slice(0, 12),
-    diagnostics
+    diagnostics: {
+      ...diagnostics,
+      dictionarySource: dictionaryState.source,
+      dictionaryWordCount: dictionaryState.wordCount,
+      dictionaryLoading: dictionaryState.loading
+    }
   };
 }
 
@@ -494,19 +524,22 @@ let broadcastPending = false;
 function broadcastState(lightweight = false) {
   if (broadcastPending) return;
   broadcastPending = true;
-  setTimeout(() => {
-    broadcastPending = false;
-    const payload = JSON.stringify({ type: "state", payload: buildStatePayload() });
-    wss.clients.forEach((client) => {
-      if (client.readyState === 1) {
-        try {
-          client.send(payload);
-        } catch (err) {
-          console.error("[SAFETY-NET] Error sending to a client:", err);
+  setTimeout(
+    () => {
+      broadcastPending = false;
+      const payload = JSON.stringify({ type: "state", payload: buildStatePayload() });
+      wss.clients.forEach((client) => {
+        if (client.readyState === 1) {
+          try {
+            client.send(payload);
+          } catch (err) {
+            console.error("[SAFETY-NET] Error sending to a client:", err);
+          }
         }
-      }
-    });
-  }, lightweight ? 0 : 120);
+      });
+    },
+    lightweight ? 0 : 120
+  );
 }
 
 wss.on(
@@ -521,7 +554,7 @@ wss.on(
         try {
           msg = JSON.parse(raw.toString());
         } catch {
-          return; // ignore malformed messages instead of crashing
+          return;
         }
         handleClientAction(msg);
       })
@@ -543,21 +576,14 @@ function handleClientAction(msg) {
       broadcastState();
       break;
     case "set_test_mode":
-      if (payload?.enabled) {
-        startTestMode();
-      } else {
-        stopTestMode();
-      }
+      if (payload?.enabled) startTestMode();
+      else stopTestMode();
       break;
     case "start_game":
-      game.difficulty = payload?.difficulty || game.difficulty;
-      game.scores.clear();
-      game.usedWords.clear();
-      game.roundNumber = 0;
-      startRound();
+      startGame(Number(payload?.wordLength) || 5, Number(payload?.quickStartCount) || 0);
       break;
-    case "skip_word":
-      if (game.status === "live") timeoutRound();
+    case "give_up":
+      giveUp();
       break;
     case "end_game":
       endGame();
@@ -579,4 +605,5 @@ server.listen(PORT, () => {
       ? "EulerStream signing key detected - TikTok connections are ready."
       : "No EULERSTREAM_API_KEY found - Test Mode will work, but live TikTok connections will not."
   );
+  loadDictionary();
 });

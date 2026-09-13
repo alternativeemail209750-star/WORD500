@@ -1,7 +1,7 @@
 {
   "name": "word500-tiktok-game",
-  "version": "1.0.0",
-  "description": "WORD500 - a live word-guessing game show powered by TikTok LIVE chat comments",
+  "version": "2.0.0",
+  "description": "WORD500 - a live Wordle-style word game powered by TikTok LIVE chat comments",
   "type": "module",
   "main": "server.js",
   "scripts": {
