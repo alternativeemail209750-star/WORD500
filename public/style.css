@@ -408,6 +408,15 @@ button, input, select { font-family: var(--font-body); color: inherit; }
   justify-content: center;
   z-index: 50;
 }
+/* The "hidden" HTML attribute and the ".modalOverlay { display: flex }"
+   rule above have equal CSS specificity, so without this rule the
+   browser's cascade order let "display: flex" win even while hidden
+   was set - the modal would show (and stay showing) no matter what
+   the Close/Got it buttons did. This rule's higher specificity
+   guarantees [hidden] always wins. */
+.modalOverlay[hidden] {
+  display: none;
+}
 .modal {
   background: var(--panel);
   border: 1px solid var(--border);
