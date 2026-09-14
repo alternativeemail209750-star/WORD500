@@ -172,16 +172,17 @@ button { cursor: pointer; }
 .statValue { font-family: var(--font-display); font-weight: 700; font-size: 17px; }
 
 /* ---- Tile grid ---- */
-.tilesWrap { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 10px; }
-.tileRow { display: flex; gap: 6px; }
+.tilesWrap { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 4px; }
+.guessBlock { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.tileRow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .tile {
-  width: 38px;
-  height: 44px;
+  width: 34px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
-  font-size: 19px;
+  font-size: 17px;
   font-weight: 700;
   border-radius: 8px;
   background: rgba(246, 244, 239, 0.04);
@@ -189,38 +190,36 @@ button { cursor: pointer; }
   color: var(--text);
   text-transform: uppercase;
 }
-.tile.correct {
-  background: linear-gradient(160deg, #57d98c, #3fc274);
-  border-color: transparent;
-  color: #08301a;
-  box-shadow: 0 6px 14px rgba(74, 222, 128, 0.28);
-  animation: tile-pop 0.32s ease;
-}
-.tile.present {
-  background: linear-gradient(160deg, #f7c862, var(--gold));
-  border-color: transparent;
-  color: #2c1f04;
-  box-shadow: 0 6px 14px rgba(244, 185, 66, 0.22);
-  animation: tile-pop 0.32s ease;
-}
-.tile.absent {
-  background: rgba(255, 107, 91, 0.16);
-  border-color: rgba(255, 107, 91, 0.3);
-  color: var(--coral);
-  animation: tile-pop 0.32s ease;
-}
+.tile.filled { border-color: rgba(246, 244, 239, 0.22); background: rgba(246, 244, 239, 0.07); animation: tile-pop 0.28s ease; }
 @keyframes tile-pop {
-  0% { transform: scale(0.82) rotateX(40deg); opacity: 0; }
-  60% { transform: scale(1.04) rotateX(0); opacity: 1; }
-  100% { transform: scale(1); }
+  0% { transform: scale(0.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }
-.tileRow .tile:nth-child(n) { animation-delay: calc(var(--i, 0) * 0.05s); }
+.tilesWrap.compact .tile { width: 22px; height: 28px; font-size: 12px; border-radius: 5px; }
 .tile.current { border-color: rgba(244, 185, 66, 0.5); animation: current-pulse 1.6s ease-in-out infinite; }
 @keyframes current-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(244, 185, 66, 0.25); }
   50% { box-shadow: 0 0 0 4px rgba(244, 185, 66, 0.12); }
 }
 
+.countsRow { display: flex; gap: 6px; }
+.countBadge {
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+}
+.countBadge.green { background: rgba(74, 222, 128, 0.18); color: var(--success); }
+.countBadge.gold { background: rgba(244, 185, 66, 0.18); color: var(--gold); }
+.countBadge.red { background: rgba(255, 107, 91, 0.18); color: var(--coral); }
+
+.hintExplainer { text-align: center; font-size: 12px; color: var(--muted); margin: -4px 0 10px; }
 .hintChips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 12px; }
 .hintChip {
   font-size: 12px;
@@ -292,11 +291,17 @@ button { cursor: pointer; }
   align-items: center;
   justify-content: center;
   text-transform: uppercase;
-  transition: background 0.2s ease, color 0.2s ease;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.08s ease;
 }
+.key:active { transform: scale(0.92); }
 .key.correct { background: #3fc274; color: #08301a; }
 .key.present { background: var(--gold); color: #2c1f04; }
 .key.absent { background: rgba(255, 107, 91, 0.22); color: var(--coral); }
+
+.keyboardHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.keyboardNote { margin: 0; font-size: 11.5px; color: var(--muted); }
 
 /* ---- Live activity (collapsible) ---- */
 .activityToggle {

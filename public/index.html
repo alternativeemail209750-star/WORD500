@@ -51,6 +51,7 @@
 
         <div class="tilesWrap" id="tilesWrap"></div>
         <div class="hintChips" id="hintChips"></div>
+        <p class="hintExplainer" id="hintExplainer" hidden>💡 suggests a word that fits every clue so far — it might even be the answer!</p>
 
         <div class="voteBox" id="voteBox" hidden>
           <div class="voteHeader">
@@ -72,9 +73,13 @@
         </div>
 
         <div class="idleBanner" id="idleBanner">
-          <p>Open <strong>Settings</strong> (⚙️ top right) to choose a mode and word length, then tap Apply to begin.</p>
+          <p>Open <strong>Settings</strong> (⚙️ top right) to choose a mode, word length, and difficulty, then tap Apply to begin.</p>
         </div>
 
+        <div class="keyboardHead">
+          <p class="keyboardNote">Your scratchpad — click a letter to mark your own deductions.</p>
+          <button class="linkBtn" id="resetColorsBtn" type="button">Reset colors</button>
+        </div>
         <div class="keyboard" id="keyboard"></div>
 
         <button class="activityToggle" id="activityToggle" type="button" aria-expanded="false">
@@ -170,6 +175,22 @@
       </div>
 
       <div class="drawerSection">
+        <h4>Difficulty</h4>
+        <select id="difficultySelect" class="selectInput">
+          <option value="standard">Standard — no repeated letters, no J/Q/X/Z</option>
+          <option value="standardPlus">Standard+ — no repeated letters, J/Q/X/Z allowed</option>
+          <option value="advanced">Advanced — anything goes, repeats allowed</option>
+        </select>
+        <p class="sectionNote" id="difficultyFallbackNote">At longer word lengths, genuinely repeat-free words are rare — the game quietly falls back to Advanced-style words when Standard/Standard+ has nothing to offer.</p>
+      </div>
+
+      <div class="drawerSection" id="testAnswerSection">
+        <h4>Set the answer (Test mode only)</h4>
+        <p class="sectionNote">Type your own secret word to test a specific scenario. Leave blank for a random word.</p>
+        <input id="testAnswerInput" class="textInput" placeholder="e.g. CRANE" autocapitalize="off" autocorrect="off" spellcheck="false" />
+      </div>
+
+      <div class="drawerSection">
         <label class="switchRow">
           <input type="checkbox" id="autoContinueToggle" />
           <span class="switchTrack"><span class="switchThumb"></span></span>
@@ -251,16 +272,14 @@
         <button class="iconBtn" id="closeHowTo" type="button" aria-label="Close">✕</button>
       </div>
       <ul class="howToList">
-        <li>The game picks a hidden word. Its length is shown by the row of blank tiles.</li>
-        <li><strong>Live mode:</strong> everyone in TikTok LIVE chat types a real word of that length — the most-typed word each round becomes the audience's official guess.</li>
-        <li><strong>Test mode:</strong> the same voting gameplay, but with simulated chat and scores that aren't saved — perfect for trying things out.</li>
+        <li>The game picks a hidden word. Its length is shown by the row of blank tiles, and <strong>you only get 8 attempts</strong> to find it.</li>
+        <li>This is the real WORD500 twist: after each guess, you're told only <em>how many</em> letters are <span class="legendTile correct">green</span> (right letter, right spot), <span class="legendTile present">yellow</span> (right letter, wrong spot), and <span class="legendTile absent">red</span> (not in the word) — never <em>which</em> letters those are. You have to deduce that yourself.</li>
+        <li>The keyboard below the board is <strong>your own scratchpad</strong> — click a letter to cycle it red → yellow → green → none as you work out your deductions across guesses. "Reset colors" clears it.</li>
+        <li><strong>Difficulty</strong> changes what the secret word can be: Standard bans repeated letters and J/Q/X/Z; Standard+ bans repeats but allows those letters; Advanced allows anything.</li>
+        <li>Tap 💡 for a hint — it suggests a word that's consistent with every clue so far (up to 3 per round). It might even be the answer, if you dare use it.</li>
+        <li><strong>Live mode:</strong> everyone in TikTok LIVE chat types a real word of the right length — the most-typed word each round becomes the audience's official guess.</li>
+        <li><strong>Test mode:</strong> the same gameplay with simulated chat, scores that aren't saved, and an optional field to set your own secret word for testing.</li>
         <li><strong>Offline mode:</strong> just you — type your own guesses directly, no chat needed.</li>
-        <li><span class="legendTile correct">A</span> = right letter, right spot.</li>
-        <li><span class="legendTile present">B</span> = right letter, wrong spot.</li>
-        <li><span class="legendTile absent">C</span> = letter isn't in the word.</li>
-        <li>The keyboard colors itself in as clues come in, to help plan the next guess.</li>
-        <li>Tap 💡 for a hint (up to 3 per round) — it reveals one letter's position for free.</li>
-        <li>You (or the audience) share one pool of 15 attempts per word.</li>
       </ul>
       <button class="btn btnGold" id="closeHowTo2" type="button">Got it</button>
     </div>

@@ -27,6 +27,7 @@ const el = {
   lengthStat: document.getElementById("lengthStat"),
   tilesWrap: document.getElementById("tilesWrap"),
   hintChips: document.getElementById("hintChips"),
+  hintExplainer: document.getElementById("hintExplainer"),
   voteBox: document.getElementById("voteBox"),
   voteTimer: document.getElementById("voteTimer"),
   voteList: document.getElementById("voteList"),
@@ -36,9 +37,9 @@ const el = {
   playAgainBtn: document.getElementById("playAgainBtn"),
   autoContinueNote: document.getElementById("autoContinueNote"),
   idleBanner: document.getElementById("idleBanner"),
+  resetColorsBtn: document.getElementById("resetColorsBtn"),
   keyboard: document.getElementById("keyboard"),
   activityToggle: document.getElementById("activityToggle"),
-  activityChev: document.getElementById("activityChev"),
   ticker: document.getElementById("ticker"),
 
   controlsHandle: document.getElementById("controlsHandle"),
@@ -64,6 +65,9 @@ const el = {
   connectBtn: document.getElementById("connectBtn"),
   disconnectBtn: document.getElementById("disconnectBtn"),
   wordLengthSelect: document.getElementById("wordLengthSelect"),
+  difficultySelect: document.getElementById("difficultySelect"),
+  testAnswerSection: document.getElementById("testAnswerSection"),
+  testAnswerInput: document.getElementById("testAnswerInput"),
   autoContinueToggle: document.getElementById("autoContinueToggle"),
   delayInput: document.getElementById("delayInput"),
   applyBtn: document.getElementById("applyBtn"),
@@ -93,8 +97,15 @@ const MODE_LABELS = {
 };
 
 // ------------------------------------------------------------
-// Build the keyboard once
+// Manual scratchpad keyboard - the real WORD500 keyboard is NOT
+// auto-colored by the game. The player clicks a letter to cycle its
+// color themselves (red -> yellow -> green -> none) to track their
+// own deductions. This lives only in the browser; the server never
+// sees or uses it.
 // ------------------------------------------------------------
+const CYCLE = [null, "absent", "present", "correct"]; // none -> red -> yellow -> green -> none
+let manualKeyColors = {};
+
 const KEYBOARD_ROWS = [
   ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
   ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
@@ -108,10 +119,34 @@ for (const row of KEYBOARD_ROWS) {
     key.className = "key";
     key.dataset.letter = letter;
     key.textContent = letter;
+    key.addEventListener("click", () => cycleKeyColor(letter));
     rowEl.appendChild(key);
   }
   el.keyboard.appendChild(rowEl);
 }
+
+function cycleKeyColor(letter) {
+  const current = manualKeyColors[letter] || null;
+  const currentIndex = CYCLE.indexOf(current);
+  const next = CYCLE[(currentIndex + 1) % CYCLE.length];
+  if (next) manualKeyColors[letter] = next;
+  else delete manualKeyColors[letter];
+  paintKeyboard();
+}
+
+function resetManualColors() {
+  manualKeyColors = {};
+  paintKeyboard();
+}
+
+function paintKeyboard() {
+  el.keyboard.querySelectorAll(".key").forEach((key) => {
+    const status = manualKeyColors[key.dataset.letter];
+    key.className = "key" + (status ? ` ${status}` : "");
+  });
+}
+
+el.resetColorsBtn.addEventListener("click", resetManualColors);
 
 // ------------------------------------------------------------
 // Populate the word-length dropdown (4 through 20 letters)
@@ -132,6 +167,7 @@ let stagedMode = "test";
 function syncStagedSettingsFromState(g) {
   stagedMode = g.mode;
   el.wordLengthSelect.value = String(g.wordLength);
+  el.difficultySelect.value = g.difficulty;
   el.autoContinueToggle.checked = g.autoContinue;
   el.delayInput.value = g.autoContinueDelaySeconds;
   updateModePickerLabel();
@@ -143,6 +179,7 @@ function updateModePickerLabel() {
   document.querySelectorAll(".pickerOption").forEach((btn) => {
     btn.classList.toggle("selected", btn.dataset.mode === stagedMode);
   });
+  el.testAnswerSection.hidden = stagedMode !== "test";
 }
 
 // ------------------------------------------------------------
@@ -264,6 +301,8 @@ el.applyBtn.addEventListener("click", () => {
   send("apply_settings", {
     mode: stagedMode,
     wordLength: Number(el.wordLengthSelect.value),
+    difficulty: el.difficultySelect.value,
+    testAnswer: stagedMode === "test" ? el.testAnswerInput.value.trim() : "",
     autoContinue: el.autoContinueToggle.checked,
     autoContinueDelaySeconds: Number(el.delayInput.value) || 12
   });
@@ -303,9 +342,11 @@ const CONNECTION_LABELS = {
 };
 
 let lastTilesSignature = "";
+let wasFreshRoundStart = false;
 
 function render(state) {
   lastState = state;
+  detectFreshRound(state.game);
   renderHeader(state);
   renderModeUI(state.game);
   renderStats(state.game);
@@ -313,11 +354,19 @@ function render(state) {
   renderHintChips(state.game);
   renderVoteOrOffline(state.game);
   renderBanners(state.game);
-  renderKeyboard(state.game);
+  renderKeyboardVisibility(state.game);
   renderTicker(state.recentComments);
   renderSettingsChips(state);
   renderDiagnostics(state.diagnostics);
   if (!el.leaderboardOverlay.hidden) renderLeaderboardTab();
+}
+
+// A "fresh round" (new secret word) should clear the player's manual
+// deduction marks from the previous word - they no longer apply.
+function detectFreshRound(g) {
+  const isFreshRoundStart = g.status === "live" && g.guesses.length === 0;
+  if (isFreshRoundStart && !wasFreshRoundStart) resetManualColors();
+  wasFreshRoundStart = isFreshRoundStart;
 }
 
 function renderHeader(state) {
@@ -348,18 +397,20 @@ function renderTiles(g) {
   lastTilesSignature = signature;
 
   el.tilesWrap.innerHTML = "";
+  el.tilesWrap.classList.toggle("compact", g.wordLength > 10);
   const rowsToShow = g.status === "idle" ? 0 : g.maxAttempts;
 
   for (let r = 0; r < rowsToShow; r++) {
+    const guess = g.guesses[r];
+    const block = document.createElement("div");
+    block.className = "guessBlock";
+
     const rowEl = document.createElement("div");
     rowEl.className = "tileRow";
-    const guess = g.guesses[r];
-
     for (let c = 0; c < g.wordLength; c++) {
       const tile = document.createElement("div");
-      tile.style.setProperty("--i", c);
       if (guess) {
-        tile.className = `tile ${guess.feedback[c]}`;
+        tile.className = "tile filled";
         tile.textContent = guess.word[c];
       } else {
         tile.className = "tile";
@@ -367,19 +418,31 @@ function renderTiles(g) {
       }
       rowEl.appendChild(tile);
     }
-    el.tilesWrap.appendChild(rowEl);
+    block.appendChild(rowEl);
+
+    if (guess) {
+      const countsRow = document.createElement("div");
+      countsRow.className = "countsRow";
+      countsRow.innerHTML =
+        `<span class="countBadge green">${guess.counts.green}</span>` +
+        `<span class="countBadge gold">${guess.counts.yellow}</span>` +
+        `<span class="countBadge red">${guess.counts.red}</span>`;
+      block.appendChild(countsRow);
+    }
+
+    el.tilesWrap.appendChild(block);
   }
 }
 
 function renderHintChips(g) {
-  if (!g.revealedHints || g.revealedHints.length === 0) {
+  const hasHints = g.hintSuggestions && g.hintSuggestions.length > 0;
+  el.hintExplainer.hidden = !hasHints;
+  if (!hasHints) {
     el.hintChips.innerHTML = "";
     return;
   }
-  el.hintChips.innerHTML = g.revealedHints
-    .slice()
-    .sort((a, b) => a.position - b.position)
-    .map((h) => `<span class="hintChip">Letter ${h.position + 1}: ${h.letter.toUpperCase()}</span>`)
+  el.hintChips.innerHTML = g.hintSuggestions
+    .map((word) => `<span class="hintChip">Try: ${escapeHtml(word.toUpperCase())}</span>`)
     .join("");
 }
 
@@ -423,14 +486,9 @@ function renderBanners(g) {
   }
 }
 
-function renderKeyboard(g) {
-  const showKeyboard = g.status === "live";
-  el.keyboard.style.display = showKeyboard ? "flex" : "none";
-  if (!showKeyboard) return;
-  el.keyboard.querySelectorAll(".key").forEach((key) => {
-    const status = g.keyboardState ? g.keyboardState[key.dataset.letter] : null;
-    key.className = "key" + (status ? ` ${status}` : "");
-  });
+function renderKeyboardVisibility(g) {
+  el.keyboard.style.display = g.status === "live" ? "flex" : "none";
+  el.resetColorsBtn.style.display = g.status === "live" ? "inline-flex" : "none";
 }
 
 function renderTicker(comments) {
