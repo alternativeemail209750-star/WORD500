@@ -1,63 +1,93 @@
-# WORD500 — the real rules, live on TikTok
+# WORD500 — unlimited-guess deduction, live on TikTok
 
 This is a complete, ready-to-run web app. You don't need to write or
-edit any code. This document explains the actual WORD500 rules (verified
-against word500.com and its community writeups) and walks you through
+edit any code. This document explains the rules and walks you through
 putting it online.
 
 ---
 
-## 1. The real rules — what makes WORD500 different from Wordle
+## 1. The rules
 
-This is **not** standard Wordle. The core twist:
+- Guess the hidden word. Its length is your choice (4-20 letters) in
+  Settings. **Guessing is unlimited** — anyone can guess, any number
+  of times, at any moment.
+- Every guess only reveals **counts**, never which letters:
+  - 🟩 Green — right letter, right spot
+  - 🟨 Yellow — right letter, wrong spot
+  - 🟥 Red — not in the word
+- **A guess only counts if it still fits every clue so far.** If it
+  contradicts an earlier guess's counts, it's rejected instantly with
+  a brief on-screen note (visible for under a second) explaining which
+  earlier guess it conflicts with — this is what keeps unlimited
+  guessing meaningful instead of just spamming random words. One neat
+  side effect: a wrong word can never be validly guessed twice, since
+  repeating it would contradict its own first (non-winning) result.
+- The keyboard — and every letter tile in every guessed word — is a
+  **host-only, click-to-mark scratchpad**. Click to cycle a letter red
+  → yellow → green → none. The game never colors anything for you;
+  letters that have appeared in any guess just get a subtly darker
+  shade so you can see what's been tried, regardless of your own
+  marks.
+- 💡 **Hints are unlimited** and suggest a word consistent with every
+  clue so far — never the literal answer.
+- **Difficulty** (Normal / Medium / Hard) controls which secret words
+  are eligible — see the difficulty engine section below. It changes
+  how hard the word itself is to deduce, not how much information you
+  get or how many guesses you're allowed.
 
-- You get **8 attempts** to find the secret word.
-- After each guess, you're told only **how many** letters are:
-  - 🟩 **Green** — right letter, right spot
-  - 🟨 **Yellow** — right letter, wrong spot
-  - 🟥 **Red** — not in the word
-  - ...but **never which letters** those are. A guess of "TODAY" against
-    the answer "LASER" shows 0 green / 1 yellow / 4 red — and that's
-    all you get. You have to deduce the rest yourself.
-- The on-screen keyboard is **your own scratchpad**, not an automatic
-  hint system — click a letter to cycle it red → yellow → green → none
-  as you reason through your guesses. "Reset colors" clears it. The
-  game itself never colors it for you.
-- **Difficulty** controls what the secret word can be:
-  - **Standard** — no repeated letters, and excludes J/Q/X/Z
-  - **Standard+** — no repeated letters, J/Q/X/Z allowed
-  - **Advanced** — anything goes, including repeated letters
-- **Hint** (💡, up to 3 per round) suggests a word that's consistent
-  with every clue you've received so far — a solver assist, not a
-  cheat. It might even be the actual answer, if you dare use it.
+**Three modes**, each with a slightly different bottom control bar:
 
-On top of that authentic core, this build adds three modes for running
-it as a TikTok LIVE show (these are not part of the original game):
-
-- **Live** — connects to your real TikTok LIVE chat. Every few seconds
-  is a voting round: anyone in chat can type a real word of the right
-  length, and whichever word gets typed most becomes the audience's
-  official guess for that turn. Scores count toward the leaderboard.
-- **Test** — the same voting gameplay, but with simulated fake chat
-  instead of a real TikTok connection, and scores are **not** saved.
-  There's also an optional field to type your **own secret word**, so
-  you can test a specific scenario instead of getting a random one.
-- **Offline** — just you. A text box lets you type your own guesses
-  directly — no chat, no leaderboard, just solo practice.
-
-**One customization beyond the original game:** word500.com always
-uses 5-letter words. This build lets you pick **any length from 4 to
-20 letters** in Settings, for variety on a longer show. Genuinely
-common 18-20 letter English words are rare, so those lengths only
-offer a couple of options each.
-
-**Known simplification:** the original site lets you type `_` to skip
-a letter you don't want to guess yet. That shortcut isn't implemented
-here — everyone just types the full word.
+- **Live** — connects to your real TikTok LIVE chat; every matching
+  comment is evaluated as a guess in real time. Scores count toward
+  the leaderboard. You can also type in the secret word yourself at
+  any time from the bottom bar (handy if you want to steer toward a
+  specific word mid-show).
+- **Test** — the same mechanics with simulated fake chat, and scores
+  are **not** saved. Also has its own "set the secret word" box, so
+  you can test an exact scenario instead of a random word.
+- **Offline** — just you. A guess box at the bottom lets you type
+  directly — no chat, no leaderboard, solo practice.
 
 ---
 
-## 2. One-time setup: get a signing key (do this first)
+## 2. The difficulty engine (Normal / Medium / Hard)
+
+Since guessing is unlimited and fully automated, difficulty can't come
+from restricting attempts — it comes from **which secret word gets
+picked**. `difficulty.js` scores every candidate word (0-100, higher =
+harder) across four factors, then buckets it:
+
+| Factor | What it measures |
+|---|---|
+| **Vocabulary** | How common the word is likely to be (word length + rare letters like J/Q/X/Z, with a discount for a small hand-picked "very familiar" word list) |
+| **Structure** | Repeated letters, consonant clusters, vowel scarcity — things that make aggregate green/yellow/red counts harder to reason about |
+| **Ambiguity** | How many other same-length words look similar (share most of their letters) — more look-alikes means more genuine deduction work |
+| **Information** | A proxy for how much a single count actually narrows things down (repeated letters blur a count's meaning) |
+
+The four scores are combined with configurable weights
+(`DIFFICULTY_WEIGHTS`) into one score, then bucketed by configurable
+thresholds (`DIFFICULTY_THRESHOLDS`, default: 0-35 Normal, 36-65
+Medium, 66-100 Hard). Both live at the top of `difficulty.js` and are
+safe to tune without touching any scoring logic.
+
+**Honest limitation:** vocabulary familiarity is a heuristic proxy
+(word length + letter rarity + a hand-picked common-word list), not a
+real frequency corpus — there's no internet-scale word-frequency
+dataset wired in. It's a reasonable approximation, not a guarantee.
+Also, very short (4-letter) and very long (18-20 letter) word pools
+are small and structurally uniform, so they may cluster into one tier
+— the game gracefully falls back to the full pool for that length if
+a tier has nothing to offer.
+
+**Built to extend:** `difficulty.js` is a standalone module (scoring
+functions + `getWordsForDifficulty()`) so future modes — Speed Round,
+Double Letter, Rare Letter, Trick Word, Boss Round, etc. — can layer
+new selection or timing rules on top without touching the scoring
+engine itself.
+
+---
+
+## 3. One-time setup: get a signing key (do this first)
 
 TikTok doesn't publish an official way for outside apps to read LIVE
 chat, so this app uses a well-known, widely-used service called
@@ -66,14 +96,14 @@ without a key, Live mode won't be able to connect.
 
 1. Go to **https://www.eulerstream.com** and create a free account.
 2. Once logged in, find your **API key** on your dashboard.
-3. Copy it somewhere safe — you'll paste it into Render in step 4 below.
+3. Copy it somewhere safe — you'll paste it into Render in step 5.
 
 You can skip this for now if you only want **Test** or **Offline** mode
 to start with, but you'll need it before using Live mode.
 
 ---
 
-## 3. Step 1 — Put the code on GitHub
+## 4. Step 1 — Put the code on GitHub
 
 1. Download all the files into one folder on your computer. Keep the
    `public` folder as a folder — don't rename or flatten it.
@@ -93,6 +123,7 @@ Double-check your repo looks like this afterward:
 server.js
 answers.js
 dictionary.js
+difficulty.js
 package.json
 render.yaml
 README.md
@@ -111,7 +142,7 @@ the `public` folder by itself — this is the #1 cause of a "Cannot GET
 
 ---
 
-## 4. Step 2 — Create the Render web service
+## 5. Step 2 — Create the Render web service
 
 1. Go to **https://render.com** and log in.
 2. Click **New +** → **Web Service**.
@@ -143,47 +174,44 @@ minutes before going live so it's already awake.
 
 ---
 
-## 5. Step 3 — Try Test Mode (with your own word), then Offline Mode
+## 6. Step 3 — Try Test Mode, then Offline Mode
 
 1. Open your Render URL.
 2. Tap ⚙️ **Settings** → tap the **Mode** row → choose **Test** → pick a
-   word length and difficulty.
-3. To test a specific scenario: type a word into **"Set the answer
-   (Test mode only)"** — it must match the word length you picked.
-   Leave it blank for a random word instead.
-4. Tap **Apply settings & start new round**. Watch fake viewers "vote"
-   on words every few seconds and the green/yellow/red counts update —
-   proving the whole pipeline works with no TikTok account needed.
-5. Try clicking a few letters on the keyboard to see the manual
-   red → yellow → green → none cycle, then tap **Reset colors**.
-6. Now try **Offline**: open Settings again, switch Mode to Offline,
-   Apply. A guess box appears at the bottom — type a real word of the
-   right length and press Enter to play solo.
+   word length and difficulty → **Apply settings & start new round**.
+3. In the bottom bar, try the **"Set the secret word…"** box to force a
+   specific word, then watch fake viewers guess it — the tile rows fill
+   in with each guess and its green/yellow/red counts, newest at top.
+4. Click a few letters on the keyboard (or on a guessed word's tiles)
+   to see the manual red → yellow → green → none cycle, then tap
+   **Reset colors**.
+5. Now try **Offline**: Settings → Mode → Offline → Apply. A guess box
+   appears at the bottom — type a real word and press Enter.
 
 **Run through Test Mode after any future change** — the fastest way to
 confirm the game still works before relying on it live.
 
 ---
 
-## 6. Step 4 — Go live with your real TikTok
+## 7. Step 4 — Go live with your real TikTok
 
 1. Start your TikTok LIVE broadcast as normal.
 2. Open ⚙️ **Settings**, set Mode to **Live**, pick a word length and
    difficulty, tap **Apply settings & start new round**.
-3. In the same Settings panel (or the bottom bar), type your TikTok
-   **username** (no @) and tap **Connect**.
+3. In the same panel (or the bottom bar), type your TikTok **username**
+   (no @) and tap **Connect**.
 4. Watch the status chips at the top of Settings — they'll show
    **Connecting…**, then either **LIVE** or a plain-language
    explanation of what went wrong.
-5. Tell your audience the rules (or tap ❓ and read it out): type a real
-   word of the shown length into chat. Every guess only shows a
-   green/yellow/red count, never which letters — that's the game.
+5. Tell your audience the rules (or tap ❓): type a real word of the
+   shown length into chat, any time, as many times as they like — it
+   only counts if it still fits every clue so far.
 6. Tap 💡 any time for a solver hint, **Give up** to end a word early,
    or **Play again** once a round finishes.
 
 ---
 
-## 7. Viewing this on your phone while broadcasting
+## 8. Viewing this on your phone while broadcasting
 
 Since your phone is likely busy running the TikTok LIVE broadcast
 itself, most hosts use a **second device** (tablet, laptop, or a second
@@ -197,7 +225,7 @@ bottom, so you can always reach them no matter how far you've scrolled.
 
 ---
 
-## 8. Reading the Diagnostics panel
+## 9. Reading the Diagnostics panel
 
 Diagnostics live inside the ⚙️ Settings panel (scroll down).
 
@@ -213,7 +241,7 @@ Diagnostics live inside the ⚙️ Settings panel (scroll down).
 
 ---
 
-## 9. Troubleshooting common messages
+## 10. Troubleshooting common messages
 
 | Message you might see | What it means | What to do |
 |---|---|---|
@@ -222,22 +250,23 @@ Diagnostics live inside the ⚙️ Settings panel (scroll down).
 | "That TikTok username couldn't be found" | Typo, or the account doesn't exist | Re-check spelling, no @ symbol |
 | "That account doesn't look like it's LIVE right now" | You connected before starting the broadcast, or it ended | Start your TikTok LIVE first, then connect |
 | "The signing key was rejected" | The key was mistyped or expired | Copy it again from EulerStream and update it on Render |
-| "Test word ignored…" | Your custom test word wasn't exactly the selected word length | Retype it to match, or leave it blank for a random word |
-| "Cannot GET /" in the browser | The `public` folder didn't upload correctly to GitHub | See the folder-structure note in step 3 |
+| "Must be exactly N letters…" | Your custom secret word didn't match the selected word length | Retype it to match, or change the word length first |
+| A red toast flashing "Conflicts with guess #…" | Someone's guess contradicted an earlier clue — working as intended | Nothing to fix — this is the core game mechanic |
+| "Cannot GET /" in the browser | The `public` folder didn't upload correctly to GitHub | See the folder-structure note in step 4 |
 
 ---
 
-## 10. Making changes later (optional)
+## 11. Making changes later (optional)
 
 - **Add or remove possible secret words:** open `answers.js` on GitHub,
   add or edit an entry under the right letter-length key (4 through
   20), and commit. Avoid adding a word that's just another word on the
   list with an "s" added.
+- **Retune difficulty:** open `difficulty.js` and adjust
+  `DIFFICULTY_WEIGHTS` or `DIFFICULTY_THRESHOLDS` at the top — no need
+  to touch the scoring functions themselves.
 - **Change colors:** open `public/style.css` — all colors are defined
   once at the top under `:root`.
-- **Change the vote-window length, attempt pool, or hint count:** open
-  `server.js` and adjust `VOTE_WINDOW_SECONDS`, `MAX_ATTEMPTS`, or
-  `MAX_HINTS_PER_ROUND` near the top of the file.
 - Any edit committed on GitHub triggers an automatic redeploy on Render
   within a minute or two.
 
@@ -245,18 +274,19 @@ Diagnostics live inside the ⚙️ Settings panel (scroll down).
 
 ## What's inside this project (for reference)
 
-- `server.js` — the game engine: aggregate green/yellow/red scoring,
-  difficulty filtering, the solver-style hint, TikTok connection,
-  modes, and both leaderboards.
+- `server.js` — the game engine: the consistency-checked unlimited
+  guessing pipeline, TikTok connection, modes, hints, and both
+  leaderboards.
+- `difficulty.js` — the standalone 4-factor difficulty scoring engine.
 - `answers.js` — the curated list of possible secret words, one array
   per length from 4 to 20 letters.
 - `dictionary.js` — downloads the 370,000+ word list used to check
-  whether a chat comment (or offline guess) is a real, guessable word,
-  with a small built-in fallback if the download ever fails.
+  whether a chat comment (or offline/host guess) is a real, guessable
+  word, with a small built-in fallback if the download ever fails.
 - `public/index.html`, `public/style.css`, `public/game.js` — the
   screen you and your audience look at, including the manual
-  scratchpad keyboard (entirely client-side — the server never sees
-  or uses those colors).
+  scratchpad keyboard and per-tile coloring (entirely client-side —
+  the server never sees or uses those marks).
 - `.env.example` — a reference list of the one setting the app uses.
 - `render.yaml` — an optional shortcut for Render's "Blueprint" deploy
   option, instead of the manual steps above.

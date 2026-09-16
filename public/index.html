@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
 <title>WORD500 — Live Word Game</title>
-<meta name="description" content="A live Wordle-style word game powered by TikTok LIVE chat." />
+<meta name="description" content="A live word-deduction game powered by TikTok LIVE chat." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link
@@ -26,22 +26,22 @@
       </div>
       <div class="toolbarRow">
         <span class="modeBadge" id="modeBadge">TEST</span>
-        <button class="iconBtn" id="hintBtn" type="button" aria-label="Use a hint">
-          💡<span class="iconBadge" id="hintBadge">3</span>
-        </button>
+        <button class="iconBtn" id="hintBtn" type="button" aria-label="Use a hint">💡</button>
         <button class="iconBtn" id="helpBtn" type="button" aria-label="How to play">❓</button>
         <button class="iconBtn" id="leaderboardBtn" type="button" aria-label="Leaderboard">🏆</button>
         <button class="iconBtn" id="settingsBtn" type="button" aria-label="Settings">⚙️</button>
       </div>
     </header>
 
+    <div class="rejectionToast" id="rejectionToast" hidden></div>
+
     <main class="stage" id="stage">
       <section class="round-card">
 
         <div class="statsRow">
           <div class="statBox">
-            <span class="statLabel">Attempts left</span>
-            <span class="statValue" id="attemptsStat">—</span>
+            <span class="statLabel">Guesses made</span>
+            <span class="statValue" id="guessesStat">—</span>
           </div>
           <div class="statBox">
             <span class="statLabel">Word length</span>
@@ -51,19 +51,14 @@
 
         <div class="tilesWrap" id="tilesWrap"></div>
         <div class="hintChips" id="hintChips"></div>
-        <p class="hintExplainer" id="hintExplainer" hidden>💡 suggests a word that fits every clue so far — it might even be the answer!</p>
-
-        <div class="voteBox" id="voteBox" hidden>
-          <div class="voteHeader">
-            <span>Chat is voting for the next guess…</span>
-            <span class="voteTimer" id="voteTimer">6s</span>
-          </div>
-          <ul class="voteList" id="voteList"></ul>
-          <p class="voteHint">Type a real word of the right length in TikTok chat to vote for it.</p>
-        </div>
+        <p class="hintExplainer" id="hintExplainer" hidden>💡 suggests a word that fits every clue so far (never the answer itself). Unlimited uses.</p>
 
         <div class="offlineNote" id="offlineNote" hidden>
           <p>Solo practice — type your guess in the box below.</p>
+        </div>
+
+        <div class="liveNote" id="liveNote" hidden>
+          <p>Unlimited guessing — anyone in chat can guess anytime. A guess only counts if it still fits every clue so far.</p>
         </div>
 
         <div class="resultBanner" id="resultBanner" hidden>
@@ -77,7 +72,7 @@
         </div>
 
         <div class="keyboardHead">
-          <p class="keyboardNote">Your scratchpad — click a letter to mark your own deductions.</p>
+          <p class="keyboardNote">Host-only scratchpad — click any letter (or letter tile) to mark it.</p>
           <button class="linkBtn" id="resetColorsBtn" type="button">Reset colors</button>
         </div>
         <div class="keyboard" id="keyboard"></div>
@@ -109,10 +104,20 @@
             />
             <button id="connectBtnBottom" class="btn btnPrimary" type="button">Connect</button>
           </div>
+          <div class="row">
+            <input id="setAnswerInputLive" class="textInput" placeholder="Set the secret word…" autocapitalize="off" autocorrect="off" spellcheck="false" />
+            <button id="setAnswerBtnLive" class="btn btnGhost" type="button">Set</button>
+          </div>
+          <p class="miniStatus" id="setAnswerErrorLive"></p>
         </div>
 
         <div class="modeControls" id="testControls" hidden>
           <p class="sectionNote">Test Mode is simulating chat automatically — nothing to connect.</p>
+          <div class="row">
+            <input id="setAnswerInputTest" class="textInput" placeholder="Set the secret word…" autocapitalize="off" autocorrect="off" spellcheck="false" />
+            <button id="setAnswerBtnTest" class="btn btnGhost" type="button">Set</button>
+          </div>
+          <p class="miniStatus" id="setAnswerErrorTest"></p>
         </div>
 
         <div class="modeControls" id="offlineControls" hidden>
@@ -177,17 +182,11 @@
       <div class="drawerSection">
         <h4>Difficulty</h4>
         <select id="difficultySelect" class="selectInput">
-          <option value="standard">Standard — no repeated letters, no J/Q/X/Z</option>
-          <option value="standardPlus">Standard+ — no repeated letters, J/Q/X/Z allowed</option>
-          <option value="advanced">Advanced — anything goes, repeats allowed</option>
+          <option value="normal">Normal — common words, fast solving</option>
+          <option value="medium">Medium — trickier words, needs real deduction</option>
+          <option value="hard">Hard — tough but fair, minimal hand-holding</option>
         </select>
-        <p class="sectionNote" id="difficultyFallbackNote">At longer word lengths, genuinely repeat-free words are rare — the game quietly falls back to Advanced-style words when Standard/Standard+ has nothing to offer.</p>
-      </div>
-
-      <div class="drawerSection" id="testAnswerSection">
-        <h4>Set the answer (Test mode only)</h4>
-        <p class="sectionNote">Type your own secret word to test a specific scenario. Leave blank for a random word.</p>
-        <input id="testAnswerInput" class="textInput" placeholder="e.g. CRANE" autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <p class="sectionNote">Scored on word familiarity, letter structure, and puzzle ambiguity — not just obscure vocabulary. Very short/long word lengths may not have every tier available.</p>
       </div>
 
       <div class="drawerSection">
@@ -268,18 +267,16 @@
   <div class="modalOverlay" id="howToOverlay" hidden>
     <div class="modal">
       <div class="modalHead">
-        <h3>How to play WORD500</h3>
+        <h3>How to play</h3>
         <button class="iconBtn" id="closeHowTo" type="button" aria-label="Close">✕</button>
       </div>
       <ul class="howToList">
-        <li>The game picks a hidden word. Its length is shown by the row of blank tiles, and <strong>you only get 8 attempts</strong> to find it.</li>
-        <li>This is the real WORD500 twist: after each guess, you're told only <em>how many</em> letters are <span class="legendTile correct">green</span> (right letter, right spot), <span class="legendTile present">yellow</span> (right letter, wrong spot), and <span class="legendTile absent">red</span> (not in the word) — never <em>which</em> letters those are. You have to deduce that yourself.</li>
-        <li>The keyboard below the board is <strong>your own scratchpad</strong> — click a letter to cycle it red → yellow → green → none as you work out your deductions across guesses. "Reset colors" clears it.</li>
-        <li><strong>Difficulty</strong> changes what the secret word can be: Standard bans repeated letters and J/Q/X/Z; Standard+ bans repeats but allows those letters; Advanced allows anything.</li>
-        <li>Tap 💡 for a hint — it suggests a word that's consistent with every clue so far (up to 3 per round). It might even be the answer, if you dare use it.</li>
-        <li><strong>Live mode:</strong> everyone in TikTok LIVE chat types a real word of the right length — the most-typed word each round becomes the audience's official guess.</li>
-        <li><strong>Test mode:</strong> the same gameplay with simulated chat, scores that aren't saved, and an optional field to set your own secret word for testing.</li>
-        <li><strong>Offline mode:</strong> just you — type your own guesses directly, no chat needed.</li>
+        <li>Guess the hidden word — any length you like, chosen in Settings. <strong>Unlimited guesses</strong>, anyone can play, anytime.</li>
+        <li>Each guess only reveals <em>counts</em>: <span class="legendTile correct">green</span> = right letter &amp; spot, <span class="legendTile present">yellow</span> = right letter, wrong spot, <span class="legendTile absent">red</span> = not in the word. Never which letters — that's the puzzle.</li>
+        <li>A guess is only accepted if it still fits every clue so far. One that contradicts an earlier clue flashes a quick reason and is skipped.</li>
+        <li>The keyboard (and each guessed word) is your own click-to-mark scratchpad — host only, the game never colors it for you.</li>
+        <li>💡 unlimited hints suggest a word that fits the clues (never the answer). Difficulty (Normal/Medium/Hard) sets how tricky the word itself is.</li>
+        <li><strong>Live</strong> = real TikTok chat. <strong>Test</strong> = simulated chat, nothing saved. <strong>Offline</strong> = just you, type guesses directly.</li>
       </ul>
       <button class="btn btnGold" id="closeHowTo2" type="button">Got it</button>
     </div>

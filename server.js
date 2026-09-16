@@ -1,26 +1,35 @@
 // server.js
-// WORD500 - faithful to the real word500.com rules:
-//   - 8 attempts total
+// WORD500 - faithful to the real word500.com feedback mechanic:
 //   - Each guess only reveals COUNTS: how many letters are green
 //     (right letter, right spot), yellow (right letter, wrong spot),
 //     and red (not in the word) - never which letters those are.
-//   - Three difficulty tiers control the secret word:
-//       Standard    - no repeated letters, and no J/Q/X/Z
-//       Standard+   - no repeated letters, J/Q/X/Z allowed
-//       Advanced    - anything goes, including repeated letters
-//   - A Hint suggests a word that's consistent with every clue so far
-//     (a solver assist) - it never just reveals a letter's position.
-//   - The on-screen keyboard is a MANUAL scratchpad: the player clicks
-//     letters to cycle red -> yellow -> green -> none themselves, to
-//     track their own deductions. The server has no say in that at all
-//     - it lives entirely in the browser (see public/game.js).
 //
-// On top of that authentic core, this build adds three modes for a
-// TikTok LIVE context (not part of the original game):
-//   - Live    : real TikTok LIVE chat votes on each guess, scores count
-//   - Test    : simulated fake chat, same mechanics, scores NOT saved,
-//               plus a field to set your own secret word for testing
+// Adapted for a fully automated TikTok LIVE audience:
+//   - Guessing is UNLIMITED. Anyone can guess, any number of times.
+//     There is no attempt pool and no per-round voting window - every
+//     matching chat comment is evaluated immediately.
+//   - The catch: a guess is only accepted if it's logically CONSISTENT
+//     with every clue already revealed this round (i.e. it could still
+//     be the answer, given what's been learned so far). A guess that
+//     contradicts an earlier clue is rejected with a brief on-screen
+//     note - this is what keeps unlimited guessing meaningful instead
+//     of just spamming random words.
+//   - The on-screen keyboard AND each guessed word's letter tiles are
+//     a manual, host-only scratchpad - click to cycle red -> yellow ->
+//     green -> none. The server never colors anything automatically.
+//   - Hints are unlimited and suggest a word consistent with every
+//     clue so far - but never the literal secret word.
+//   - Difficulty (Normal / Medium / Hard) is a 4-factor score over
+//     vocabulary, word structure, candidate ambiguity, and feedback
+//     informativeness - see difficulty.js. It controls which secret
+//     words are eligible, not how much information is given.
+//
+// This build also adds three modes for a TikTok LIVE context:
+//   - Live    : real TikTok LIVE chat, guesses count toward leaderboards
+//   - Test    : simulated fake chat, same mechanics, scores NOT saved
 //   - Offline : host types guesses directly, no chat/leaderboard involved
+// In Live and Test, the host can also directly set the secret word at
+// any time from the bottom control bar.
 
 import "dotenv/config";
 import express from "express";
@@ -31,6 +40,7 @@ import { WebSocketServer } from "ws";
 import { TikTokLiveConnection, WebcastEvent, SignConfig } from "tiktok-live-connector";
 import { ANSWER_WORDS, MIN_WORD_LENGTH, MAX_WORD_LENGTH } from "./answers.js";
 import { dictionaryState, loadDictionary, isValidGuessWord } from "./dictionary.js";
+import { buildDifficultyIndex, getWordsForDifficulty } from "./difficulty.js";
 
 process.on("uncaughtException", (err) => {
   console.error("[SAFETY-NET] Uncaught exception (server keeps running):", err);
@@ -92,7 +102,6 @@ function normalizeGuess(text) {
     .trim();
 }
 
-// Aggregate counts only - never which letters. That's the whole game.
 function scoreCounts(guess, answer) {
   const n = answer.length;
   const guessLetters = guess.split("");
@@ -126,34 +135,25 @@ function countsEqual(a, b) {
   return a.green === b.green && a.yellow === b.yellow && a.red === b.red;
 }
 
-function passesDifficulty(word, difficulty) {
-  const hasRepeat = new Set(word).size !== word.length;
-  const hasExcludedLetter = /[jqxz]/.test(word);
-  if (difficulty === "standard") return !hasRepeat && !hasExcludedLetter;
-  if (difficulty === "standardPlus") return !hasRepeat;
-  return true;
+function formatCounts(c) {
+  return `${c.green}g/${c.yellow}y/${c.red}r`;
 }
 
-const MAX_ATTEMPTS = 8;
-const VOTE_WINDOW_SECONDS = 8;
-const MAX_HINTS_PER_ROUND = 3;
+const difficultyIndex = buildDifficultyIndex(ANSWER_WORDS);
+
 const DEFAULT_AUTO_CONTINUE_DELAY = 12;
 
 const game = {
   mode: "test",
   status: "idle",
   wordLength: 5,
-  difficulty: "standard",
+  difficulty: "normal",
   secretWord: null,
   guesses: [],
-  attemptsLeft: MAX_ATTEMPTS,
-  maxAttempts: MAX_ATTEMPTS,
   streak: 0,
   hintsUsed: 0,
-  maxHints: MAX_HINTS_PER_ROUND,
   hintSuggestions: [],
-  voteTally: new Map(),
-  windowEndsAt: null,
+  lastRejection: null,
   recentComments: [],
   usedWords: new Set(),
   roundScores: new Map(),
@@ -170,10 +170,7 @@ function clampWordLength(n) {
 }
 
 function pickAnswer(wordLength, difficulty) {
-  const pool = ANSWER_WORDS[wordLength] || ANSWER_WORDS[5];
-  let candidates = pool.filter((w) => passesDifficulty(w, difficulty));
-  if (candidates.length === 0) candidates = pool;
-
+  const candidates = getWordsForDifficulty(ANSWER_WORDS, difficultyIndex, wordLength, difficulty);
   const unused = candidates.filter((w) => !game.usedWords.has(w));
   const list = unused.length > 0 ? unused : candidates;
   if (unused.length === 0) game.usedWords.clear();
@@ -188,10 +185,19 @@ function awardPoints(caller, points) {
   game.totalScores.set(caller, (game.totalScores.get(caller) || 0) + points);
 }
 
+function checkConsistency(word) {
+  for (let i = 0; i < game.guesses.length; i++) {
+    const past = game.guesses[i];
+    if (!countsEqual(scoreCounts(past.word, word), past.counts)) {
+      return { ok: false, conflictIndex: i, conflictWord: past.word, conflictCounts: past.counts };
+    }
+  }
+  return { ok: true };
+}
+
 function processGuess(word, caller) {
   const counts = scoreCounts(word, game.secretWord);
   game.guesses.push({ word, counts, caller });
-  game.attemptsLeft -= 1;
 
   if (word === game.secretWord) {
     awardPoints(caller, 100);
@@ -199,41 +205,40 @@ function processGuess(word, caller) {
     game.streak += 1;
   } else {
     awardPoints(caller, 10);
-    if (game.attemptsLeft <= 0) {
-      game.status = "lost";
-      game.streak = 0;
-    }
   }
 
-  if (game.status !== "live") {
-    game.windowEndsAt = null;
-    if (game.autoContinue) {
-      game.autoContinueAt = Date.now() + game.autoContinueDelaySeconds * 1000;
-    }
+  if (game.status !== "live" && game.autoContinue) {
+    game.autoContinueAt = Date.now() + game.autoContinueDelaySeconds * 1000;
   }
+}
+
+function attemptGuess(word, caller) {
+  if (game.status !== "live") return { ok: false, error: "No round in progress." };
+
+  const consistency = checkConsistency(word);
+  if (!consistency.ok) {
+    const reason = `Conflicts with guess #${consistency.conflictIndex + 1} (${consistency.conflictWord.toUpperCase()}: ${formatCounts(consistency.conflictCounts)})`;
+    game.lastRejection = { word, reason, at: Date.now() };
+    return { ok: false, error: reason, rejected: true };
+  }
+
+  processGuess(word, caller);
+  return { ok: true };
 }
 
 function startRound(overrideWord) {
   game.secretWord = overrideWord || pickAnswer(game.wordLength, game.difficulty);
   game.guesses = [];
-  game.attemptsLeft = MAX_ATTEMPTS;
-  game.maxAttempts = MAX_ATTEMPTS;
-  game.voteTally.clear();
   game.hintsUsed = 0;
   game.hintSuggestions = [];
+  game.lastRejection = null;
   game.roundScores.clear();
   game.status = "live";
   game.autoContinueAt = null;
-
-  if (game.mode !== "offline") {
-    game.windowEndsAt = Date.now() + VOTE_WINDOW_SECONDS * 1000;
-  } else {
-    game.windowEndsAt = null;
-  }
   broadcastState();
 }
 
-function validateTestAnswer(raw, wordLength) {
+function validateWord(raw, wordLength) {
   const word = normalizeGuess(raw);
   if (!word) return null;
   if (word.length !== wordLength) return null;
@@ -256,35 +261,33 @@ function applySettings(settings) {
     }
   }
   if (wordLength !== undefined) game.wordLength = clampWordLength(wordLength);
-  if (["standard", "standardPlus", "advanced"].includes(difficulty)) game.difficulty = difficulty;
+  if (["normal", "medium", "hard"].includes(difficulty)) game.difficulty = difficulty;
   if (typeof autoContinue === "boolean") game.autoContinue = autoContinue;
   if (autoContinueDelaySeconds !== undefined) {
     const v = Number(autoContinueDelaySeconds);
     game.autoContinueDelaySeconds = Number.isFinite(v) ? Math.min(120, Math.max(3, Math.round(v))) : DEFAULT_AUTO_CONTINUE_DELAY;
   }
 
-  let overrideWord;
-  if (game.mode === "test" && settings.testAnswer) {
-    const validated = validateTestAnswer(settings.testAnswer, game.wordLength);
-    if (validated) {
-      overrideWord = validated;
-    } else {
-      diagnostics.lastErrorMessage = `Test word ignored - it must be exactly ${game.wordLength} letters, A-Z only.`;
-    }
-  }
-
-  startRound(overrideWord);
+  startRound();
 }
 
 function playAgain() {
   startRound();
 }
 
+function setSecretWord(rawWord) {
+  const validated = validateWord(rawWord, game.wordLength);
+  if (!validated) {
+    return { ok: false, error: `Must be exactly ${game.wordLength} letters, A-Z only.` };
+  }
+  startRound(validated);
+  return { ok: true };
+}
+
 function giveUp() {
   if (game.status !== "live") return;
   game.status = "lost";
   game.streak = 0;
-  game.windowEndsAt = null;
   if (game.autoContinue) game.autoContinueAt = Date.now() + game.autoContinueDelaySeconds * 1000;
   broadcastState();
 }
@@ -293,18 +296,15 @@ function endGame() {
   game.status = "idle";
   game.secretWord = null;
   game.guesses = [];
-  game.voteTally.clear();
-  game.windowEndsAt = null;
   game.autoContinueAt = null;
   broadcastState();
 }
 
 function useHint() {
   if (game.status !== "live") return;
-  if (game.hintsUsed >= game.maxHints) return;
 
-  const pool = ANSWER_WORDS[game.wordLength] || [];
-  let candidates = pool.filter((w) => passesDifficulty(w, game.difficulty));
+  let candidates = getWordsForDifficulty(ANSWER_WORDS, difficultyIndex, game.wordLength, game.difficulty);
+  candidates = candidates.filter((w) => w !== game.secretWord);
   for (const g of game.guesses) {
     candidates = candidates.filter((w) => countsEqual(scoreCounts(g.word, w), g.counts));
   }
@@ -317,55 +317,6 @@ function useHint() {
   broadcastState();
 }
 
-function addVote(username, normalizedWord) {
-  if (game.status !== "live" || game.mode === "offline") return;
-  if (normalizedWord.length !== game.wordLength) return;
-  if (normalizedWord !== game.secretWord && !isValidGuessWord(normalizedWord)) return;
-  const entry = game.voteTally.get(normalizedWord);
-  if (entry) entry.count += 1;
-  else game.voteTally.set(normalizedWord, { count: 1, firstUser: username, firstAt: Date.now() });
-}
-
-function resolveVoteWindow() {
-  if (game.voteTally.size === 0) {
-    game.windowEndsAt = Date.now() + VOTE_WINDOW_SECONDS * 1000;
-    broadcastState();
-    return;
-  }
-  let winner = null;
-  for (const [word, data] of game.voteTally.entries()) {
-    if (
-      !winner ||
-      data.count > winner.data.count ||
-      (data.count === winner.data.count && data.firstAt < winner.data.firstAt)
-    ) {
-      winner = { word, data };
-    }
-  }
-  game.voteTally.clear();
-  processGuess(winner.word, winner.data.firstUser);
-  if (game.status === "live") {
-    game.windowEndsAt = Date.now() + VOTE_WINDOW_SECONDS * 1000;
-  }
-  broadcastState();
-}
-
-function submitOfflineGuess(rawWord) {
-  if (game.mode !== "offline" || game.status !== "live") {
-    return { ok: false, error: "No round in progress." };
-  }
-  const word = normalizeGuess(rawWord);
-  if (word.length !== game.wordLength) {
-    return { ok: false, error: `Guess must be ${game.wordLength} letters.` };
-  }
-  if (word !== game.secretWord && !isValidGuessWord(word)) {
-    return { ok: false, error: "That's not in the word list." };
-  }
-  processGuess(word, "Host");
-  broadcastState();
-  return { ok: true };
-}
-
 function getLeaderboard(map) {
   return [...map.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -373,25 +324,14 @@ function getLeaderboard(map) {
     .map(([username, score]) => ({ username, score }));
 }
 
-function getTopVotes() {
-  return [...game.voteTally.entries()]
-    .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 3)
-    .map(([word, data]) => ({ word, count: data.count }));
-}
-
 setInterval(
-  safely("game-tick", () => {
-    if (game.status === "live" && game.windowEndsAt) {
-      if (Date.now() >= game.windowEndsAt) resolveVoteWindow();
-      else broadcastState(true);
-    } else if (game.autoContinueAt) {
-      if (Date.now() >= game.autoContinueAt) {
-        game.autoContinueAt = null;
-        playAgain();
-      } else {
-        broadcastState(true);
-      }
+  safely("auto-continue-tick", () => {
+    if (!game.autoContinueAt) return;
+    if (Date.now() >= game.autoContinueAt) {
+      game.autoContinueAt = null;
+      playAgain();
+    } else {
+      broadcastState(true);
     }
   }),
   1000
@@ -420,7 +360,15 @@ function handleIncomingRawEvent(raw) {
   game.recentComments.unshift({ username, text, at: Date.now() });
   if (game.recentComments.length > 30) game.recentComments.length = 30;
 
-  addVote(username, normalizeGuess(text));
+  const normalized = normalizeGuess(text);
+  if (
+    game.status === "live" &&
+    game.mode !== "offline" &&
+    normalized.length === game.wordLength &&
+    (normalized === game.secretWord || isValidGuessWord(normalized))
+  ) {
+    attemptGuess(normalized, username);
+  }
   broadcastState();
 }
 
@@ -552,7 +500,7 @@ function startTestMode() {
       if (game.status === "live" && game.secretWord && roll < 0.06) {
         text = game.secretWord;
       } else if (game.status === "live" && roll < 0.4) {
-        const pool = ANSWER_WORDS[game.wordLength] || [];
+        const pool = getWordsForDifficulty(ANSWER_WORDS, difficultyIndex, game.wordLength, game.difficulty);
         text = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : FAKE_JUNK_WORDS[0];
       } else {
         text = FAKE_JUNK_WORDS[Math.floor(Math.random() * FAKE_JUNK_WORDS.length)];
@@ -566,7 +514,7 @@ function startTestMode() {
 
       handleIncomingRawEvent(fakeRaw);
     }),
-    1000
+    900
   );
 }
 
@@ -578,7 +526,6 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 function buildStatePayload() {
-  const now = Date.now();
   return {
     game: {
       mode: game.mode,
@@ -586,20 +533,16 @@ function buildStatePayload() {
       wordLength: game.wordLength,
       difficulty: game.difficulty,
       secretWord: game.status === "lost" ? game.secretWord : null,
-      guesses: game.guesses,
-      attemptsLeft: game.attemptsLeft,
-      maxAttempts: game.maxAttempts,
+      guesses: game.guesses.slice(-12),
+      guessesMade: game.guesses.length,
+      usedLetters: [...new Set(game.guesses.flatMap((g) => g.word.split("")))],
       streak: game.streak,
       hintsUsed: game.hintsUsed,
-      maxHints: game.maxHints,
       hintSuggestions: game.hintSuggestions,
-      secondsLeftInWindow:
-        game.status === "live" && game.windowEndsAt ? Math.max(0, Math.ceil((game.windowEndsAt - now) / 1000)) : 0,
-      voteWindowSeconds: VOTE_WINDOW_SECONDS,
-      topVotes: getTopVotes(),
+      lastRejection: game.lastRejection,
       autoContinue: game.autoContinue,
       autoContinueDelaySeconds: game.autoContinueDelaySeconds,
-      autoContinueSecondsLeft: game.autoContinueAt ? Math.max(0, Math.ceil((game.autoContinueAt - now) / 1000)) : 0,
+      autoContinueSecondsLeft: game.autoContinueAt ? Math.max(0, Math.ceil((game.autoContinueAt - Date.now()) / 1000)) : 0,
       minWordLength: MIN_WORD_LENGTH,
       maxWordLength: MAX_WORD_LENGTH
     },
@@ -633,7 +576,7 @@ function broadcastState(lightweight = false) {
         }
       });
     },
-    lightweight ? 0 : 120
+    lightweight ? 0 : 100
   );
 }
 
@@ -691,8 +634,22 @@ function handleClientAction(ws, msg) {
     case "use_hint":
       useHint();
       break;
+    case "set_secret_word": {
+      const result = setSecretWord(String((payload && payload.word) || ""));
+      ws.send(JSON.stringify({ type: "set_secret_word_result", payload: result }));
+      break;
+    }
     case "submit_offline_guess": {
-      const result = submitOfflineGuess(String((payload && payload.word) || ""));
+      const word = normalizeGuess(String((payload && payload.word) || ""));
+      let result;
+      if (word.length !== game.wordLength) {
+        result = { ok: false, error: `Guess must be ${game.wordLength} letters.` };
+      } else if (word !== game.secretWord && !isValidGuessWord(word)) {
+        result = { ok: false, error: "That's not in the word list." };
+      } else {
+        result = attemptGuess(word, "Host");
+        broadcastState();
+      }
       ws.send(JSON.stringify({ type: "offline_guess_result", payload: result }));
       break;
     }

@@ -171,10 +171,10 @@ button { cursor: pointer; }
 .statLabel { font-size: 11px; color: var(--muted); }
 .statValue { font-family: var(--font-display); font-weight: 700; font-size: 17px; }
 
-/* ---- Tile grid ---- */
-.tilesWrap { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 4px; }
-.guessBlock { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.tileRow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+/* ---- Tile grid: word on the left, counts stacked on the right, one line ---- */
+.tilesWrap { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 4px; }
+.guessBlock { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+.tileRow { display: flex; gap: 6px; flex-wrap: wrap; }
 .tile {
   width: 34px;
   height: 40px;
@@ -190,7 +190,11 @@ button { cursor: pointer; }
   color: var(--text);
   text-transform: uppercase;
 }
-.tile.filled { border-color: rgba(246, 244, 239, 0.22); background: rgba(246, 244, 239, 0.07); animation: tile-pop 0.28s ease; }
+.tile.filled { border-color: rgba(246, 244, 239, 0.22); background: rgba(246, 244, 239, 0.07); animation: tile-pop 0.28s ease; cursor: pointer; user-select: none; }
+.tile.filled:active { transform: scale(0.93); }
+.tile.filled.correct { background: #3fc274; color: #08301a; border-color: transparent; }
+.tile.filled.present { background: var(--gold); color: #2c1f04; border-color: transparent; }
+.tile.filled.absent { background: rgba(255, 107, 91, 0.28); color: var(--coral); border-color: transparent; }
 @keyframes tile-pop {
   0% { transform: scale(0.85); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
@@ -202,18 +206,18 @@ button { cursor: pointer; }
   50% { box-shadow: 0 0 0 4px rgba(244, 185, 66, 0.12); }
 }
 
-.countsRow { display: flex; gap: 6px; }
+.countsCol { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
 .countBadge {
-  min-width: 26px;
-  height: 22px;
+  min-width: 30px;
+  height: 18px;
   padding: 0 6px;
-  border-radius: 6px;
+  border-radius: 5px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 12px;
+  font-size: 11px;
 }
 .countBadge.green { background: rgba(74, 222, 128, 0.18); color: var(--success); }
 .countBadge.gold { background: rgba(244, 185, 66, 0.18); color: var(--gold); }
@@ -231,34 +235,51 @@ button { cursor: pointer; }
   border: 1px solid rgba(244, 185, 66, 0.3);
 }
 
-/* ---- Vote box / offline note ---- */
-.voteBox {
-  background: rgba(246, 244, 239, 0.04);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-  margin-bottom: 14px;
-}
-.voteHeader { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
-.voteTimer { font-family: var(--font-display); font-weight: 700; color: var(--gold); min-width: 26px; text-align: right; }
-.voteList { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 5px; }
-.voteList li { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 10px; border-radius: 8px; background: rgba(246, 244, 239, 0.03); }
-.voteList .voteWord { font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
-.voteList .voteCount { color: var(--gold); font-weight: 600; }
-.voteList.empty li { color: var(--muted); font-weight: 400; text-transform: none; }
-.voteHint { margin: 0; font-size: 12px; color: var(--muted); }
-
-.offlineNote {
+/* ---- Rejection toast: brief, self-dismissing ---- */
+.rejectionToast {
+  position: sticky;
+  top: 62px;
+  z-index: 25;
+  margin: 8px 14px 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 107, 91, 0.16);
+  border: 1px solid rgba(255, 107, 91, 0.35);
+  color: var(--coral);
+  font-size: 12.5px;
+  font-weight: 600;
   text-align: center;
-  background: rgba(139, 143, 255, 0.1);
-  border: 1px solid rgba(139, 143, 255, 0.25);
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+  animation: toast-flash 0.9s ease forwards;
+}
+@keyframes toast-flash {
+  0% { opacity: 0; transform: translateY(-4px); }
+  15% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ---- Offline / live notes ---- */
+.offlineNote, .liveNote {
+  text-align: center;
   border-radius: var(--radius-md);
   padding: 10px 14px;
   margin-bottom: 14px;
-  color: var(--violet);
   font-size: 13px;
 }
-.offlineNote p { margin: 0; }
+.offlineNote {
+  background: rgba(139, 143, 255, 0.1);
+  border: 1px solid rgba(139, 143, 255, 0.25);
+  color: var(--violet);
+}
+.liveNote {
+  background: rgba(244, 185, 66, 0.08);
+  border: 1px solid rgba(244, 185, 66, 0.2);
+  color: var(--gold-dim);
+}
+.offlineNote p, .liveNote p { margin: 0; }
 
 /* ---- Result / idle banners ---- */
 .resultBanner, .idleBanner {
@@ -299,6 +320,7 @@ button { cursor: pointer; }
 .key.correct { background: #3fc274; color: #08301a; }
 .key.present { background: var(--gold); color: #2c1f04; }
 .key.absent { background: rgba(255, 107, 91, 0.22); color: var(--coral); }
+.key.used { background: rgba(246, 244, 239, 0.02); color: var(--muted); }
 
 .keyboardHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
 .keyboardNote { margin: 0; font-size: 11.5px; color: var(--muted); }
