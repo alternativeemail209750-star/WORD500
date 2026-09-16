@@ -6,7 +6,15 @@ function setRealViewportHeight() {
 }
 setRealViewportHeight();
 window.addEventListener("resize", setRealViewportHeight);
+window.addEventListener("resize", () => {
+  lastTilesSignature = ""; // force tiles to recompute their fitted size
+  if (lastState) renderTiles(lastState.game);
+});
 window.addEventListener("orientationchange", setRealViewportHeight);
+window.addEventListener("orientationchange", () => {
+  lastTilesSignature = "";
+  if (lastState) renderTiles(lastState.game);
+});
 
 const el = {
   brandDot: document.getElementById("brandDot"),
@@ -415,14 +423,30 @@ function renderStats(g) {
   el.lengthStat.textContent = g.status === "idle" ? "—" : g.wordLength + " letters";
 }
 
-function buildGuessBlock(guess, wordLength) {
+function computeTileMetrics(wordLength) {
+  const containerWidth = el.tilesWrap.clientWidth || 320;
+  const countsReserve = wordLength > 14 ? 30 : 42; // countsCol width + its gap
+  const usable = Math.max(100, containerWidth - countsReserve);
+  const gap = wordLength > 14 ? 2 : wordLength > 10 ? 3 : 6;
+  let tileSize = Math.floor((usable - gap * (wordLength - 1)) / wordLength);
+  tileSize = Math.max(8, Math.min(40, tileSize));
+  const tileHeight = Math.round(tileSize * 1.18);
+  const fontSize = Math.max(8, Math.round(tileSize * 0.42));
+  return { tileSize, tileHeight, fontSize, gap, tight: wordLength > 14 };
+}
+
+function buildGuessBlock(guess, wordLength, metrics) {
   const block = document.createElement("div");
   block.className = "guessBlock";
 
   const rowEl = document.createElement("div");
   rowEl.className = "tileRow";
+  rowEl.style.gap = metrics.gap + "px";
   for (let c = 0; c < wordLength; c++) {
     const tile = document.createElement("div");
+    tile.style.width = metrics.tileSize + "px";
+    tile.style.height = metrics.tileHeight + "px";
+    tile.style.fontSize = metrics.fontSize + "px";
     if (guess) {
       const key = guess.word + "_" + c;
       const manual = manualTileColors[key];
@@ -438,7 +462,7 @@ function buildGuessBlock(guess, wordLength) {
 
   if (guess) {
     const countsCol = document.createElement("div");
-    countsCol.className = "countsCol";
+    countsCol.className = "countsCol" + (metrics.tight ? " tight" : "");
     countsCol.innerHTML =
       '<span class="countBadge green">' + guess.counts.green + "</span>" +
       '<span class="countBadge gold">' + guess.counts.yellow + "</span>" +
@@ -455,15 +479,16 @@ function renderTiles(g) {
   lastTilesSignature = signature;
 
   el.tilesWrap.innerHTML = "";
-  el.tilesWrap.classList.toggle("compact", g.wordLength > 10);
   if (g.status === "idle") return;
 
+  const metrics = computeTileMetrics(g.wordLength);
+
   if (g.status === "live") {
-    el.tilesWrap.appendChild(buildGuessBlock(null, g.wordLength));
+    el.tilesWrap.appendChild(buildGuessBlock(null, g.wordLength, metrics));
   }
   const reversed = g.guesses.slice().reverse();
   reversed.forEach((guess) => {
-    el.tilesWrap.appendChild(buildGuessBlock(guess, g.wordLength));
+    el.tilesWrap.appendChild(buildGuessBlock(guess, g.wordLength, metrics));
   });
 }
 

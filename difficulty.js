@@ -150,8 +150,11 @@ export function buildDifficultyIndex(wordsByLength, weights = DIFFICULTY_WEIGHTS
 // Returns the candidate words for a given length + tier, falling back
 // to the full pool for that length if the tier has nothing to offer
 // (common at very long lengths where the curated pool is small).
+// tier "random" deliberately skips difficulty filtering entirely -
+// every word of that length is eligible, easy to extremely hard.
 export function getWordsForDifficulty(wordsByLength, difficultyIndex, wordLength, tier) {
   const pool = wordsByLength[wordLength] || [];
+  if (tier === "random") return pool;
   const filtered = pool.filter((w) => difficultyIndex.get(w)?.tier === tier);
   return filtered.length > 0 ? filtered : pool;
 }

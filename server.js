@@ -261,7 +261,7 @@ function applySettings(settings) {
     }
   }
   if (wordLength !== undefined) game.wordLength = clampWordLength(wordLength);
-  if (["normal", "medium", "hard"].includes(difficulty)) game.difficulty = difficulty;
+  if (["normal", "medium", "hard", "random"].includes(difficulty)) game.difficulty = difficulty;
   if (typeof autoContinue === "boolean") game.autoContinue = autoContinue;
   if (autoContinueDelaySeconds !== undefined) {
     const v = Number(autoContinueDelaySeconds);
