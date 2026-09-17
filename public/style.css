@@ -101,6 +101,19 @@ button { cursor: pointer; }
 .modeBadge.live { background: rgba(22, 217, 118, 0.16); color: var(--success); }
 .modeBadge.offline { background: rgba(246, 244, 239, 0.1); color: var(--muted); }
 
+.lengthBadge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(246, 244, 239, 0.07);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  margin-right: 2px;
+  white-space: nowrap;
+}
+
 .iconBtn {
   position: relative;
   width: 36px;
@@ -117,6 +130,7 @@ button { cursor: pointer; }
 }
 .iconBtn:active { transform: scale(0.94); }
 .iconBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+.iconBtn.active { background: rgba(255, 177, 0, 0.18); border-color: rgba(255, 177, 0, 0.4); color: var(--gold); }
 .iconBadge {
   position: absolute;
   top: -4px;
@@ -156,20 +170,6 @@ button { cursor: pointer; }
   padding: 20px 16px;
   box-shadow: var(--shadow);
 }
-
-.statsRow { display: flex; gap: 10px; margin-bottom: 16px; }
-.statBox {
-  flex: 1;
-  background: rgba(246, 244, 239, 0.04);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 9px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.statLabel { font-size: 11px; color: var(--muted); }
-.statValue { font-family: var(--font-display); font-weight: 700; font-size: 17px; }
 
 /* ---- Tile grid: word on the left, counts stacked on the right, one line ---- */
 .tilesWrap { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 4px; }
@@ -254,12 +254,12 @@ button { cursor: pointer; }
   max-width: 600px;
   margin-left: auto;
   margin-right: auto;
-  animation: toast-flash 0.9s ease forwards;
+  animation: toast-flash 2.4s ease forwards;
 }
 @keyframes toast-flash {
   0% { opacity: 0; transform: translateY(-4px); }
-  15% { opacity: 1; transform: translateY(0); }
-  80% { opacity: 1; }
+  8% { opacity: 1; transform: translateY(0); }
+  88% { opacity: 1; }
   100% { opacity: 0; }
 }
 
@@ -297,19 +297,26 @@ button { cursor: pointer; }
 .idleBanner p { font-weight: 500; margin: 0; }
 .autoContinueNote { margin: 10px 0 0 !important; font-size: 12px !important; font-weight: 500 !important; opacity: 0.85; }
 
-/* ---- Keyboard ---- */
-.keyboard { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 4px; }
-.keyRow { display: flex; gap: 5px; }
+/* ---- Keyboard: its own section, above the guessed words ---- */
+.keyboardSection {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(246, 244, 239, 0.03);
+  padding: 12px 12px 14px;
+  margin-bottom: 16px;
+}
+.keyboardHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.keyboardTitle { font-family: var(--font-display); font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.keyboard { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.keyRow { display: flex; gap: 5px; justify-content: center; }
 .key {
-  min-width: 28px;
-  height: 42px;
-  padding: 0 6px;
+  flex-shrink: 0;
+  padding: 0 4px;
   border-radius: 7px;
   background: rgba(246, 244, 239, 0.08);
   border: none;
   color: var(--text);
   font-weight: 600;
-  font-size: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -323,42 +330,6 @@ button { cursor: pointer; }
 .key.present { background: var(--gold); color: #2c1f04; }
 .key.absent { background: rgba(255, 59, 78, 0.22); color: var(--coral); }
 .key.used { background: rgba(246, 244, 239, 0.02); color: var(--muted); }
-
-.keyboardHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-.keyboardNote { margin: 0; font-size: 11.5px; color: var(--muted); }
-
-/* ---- Live activity (collapsible) ---- */
-.activityToggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: none;
-  border: none;
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 12px 2px 4px;
-  margin-top: 8px;
-}
-.chev { transition: transform 0.2s ease; }
-.activityToggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
-.ticker {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  max-height: 190px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 6px;
-}
-.ticker.collapsed { display: none; }
-.ticker li { font-size: 13px; padding: 7px 9px; border-radius: var(--radius-sm); background: rgba(246, 244, 239, 0.03); }
-.ticker li.empty { color: var(--muted); text-align: center; background: none; }
-.ticker .tkUser { color: var(--gold); font-weight: 600; margin-right: 6px; }
-.ticker .tkText { color: var(--text); word-break: break-word; }
 
 /* ============================================================
    Host controls (sticky bottom)
@@ -495,6 +466,7 @@ button { cursor: pointer; }
   font-size: 14px;
   font-weight: 600;
 }
+.chev { color: var(--muted); }
 
 .linkBtn { background: none; border: none; color: var(--muted); font-size: 11px; text-transform: none; letter-spacing: 0; cursor: pointer; padding: 2px 4px; }
 
@@ -642,4 +614,28 @@ button { cursor: pointer; }
 @media (min-width: 720px) {
   .stage { padding: 22px 16px 30px; }
   .tile { width: 44px; height: 50px; font-size: 22px; }
+}
+
+/* ============================================================
+   Win celebration confetti
+   ============================================================ */
+.confettiLayer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 90;
+  overflow: hidden;
+}
+.confettiPiece {
+  position: absolute;
+  top: -12px;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0.95;
+  animation: confetti-fall linear forwards;
+}
+@keyframes confetti-fall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(105vh) rotate(540deg); opacity: 0.3; }
 }

@@ -7,7 +7,7 @@ function setRealViewportHeight() {
 setRealViewportHeight();
 window.addEventListener("resize", setRealViewportHeight);
 window.addEventListener("resize", () => {
-  lastTilesSignature = ""; // force tiles to recompute their fitted size
+  lastTilesSignature = "";
   if (lastState) renderTiles(lastState.game);
 });
 window.addEventListener("orientationchange", setRealViewportHeight);
@@ -19,29 +19,28 @@ window.addEventListener("orientationchange", () => {
 const el = {
   brandDot: document.getElementById("brandDot"),
   modeBadge: document.getElementById("modeBadge"),
+  lengthBadge: document.getElementById("lengthBadge"),
   hintBtn: document.getElementById("hintBtn"),
   helpBtn: document.getElementById("helpBtn"),
   leaderboardBtn: document.getElementById("leaderboardBtn"),
   settingsBtn: document.getElementById("settingsBtn"),
+  fullscreenBtn: document.getElementById("fullscreenBtn"),
 
+  confettiLayer: document.getElementById("confettiLayer"),
   rejectionToast: document.getElementById("rejectionToast"),
 
-  guessesStat: document.getElementById("guessesStat"),
-  lengthStat: document.getElementById("lengthStat"),
   tilesWrap: document.getElementById("tilesWrap"),
   hintChips: document.getElementById("hintChips"),
   hintExplainer: document.getElementById("hintExplainer"),
   offlineNote: document.getElementById("offlineNote"),
-  liveNote: document.getElementById("liveNote"),
   resultBanner: document.getElementById("resultBanner"),
   resultText: document.getElementById("resultText"),
   playAgainBtn: document.getElementById("playAgainBtn"),
   autoContinueNote: document.getElementById("autoContinueNote"),
   idleBanner: document.getElementById("idleBanner"),
   resetColorsBtn: document.getElementById("resetColorsBtn"),
+  keyboardSection: document.getElementById("keyboardSection"),
   keyboard: document.getElementById("keyboard"),
-  activityToggle: document.getElementById("activityToggle"),
-  ticker: document.getElementById("ticker"),
 
   controlsHandle: document.getElementById("controlsHandle"),
   controlsBody: document.getElementById("controlsBody"),
@@ -75,6 +74,7 @@ const el = {
   difficultySelect: document.getElementById("difficultySelect"),
   autoContinueToggle: document.getElementById("autoContinueToggle"),
   delayInput: document.getElementById("delayInput"),
+  leaderboardShowInput: document.getElementById("leaderboardShowInput"),
   applyBtn: document.getElementById("applyBtn"),
   diagToggle: document.getElementById("diagToggle"),
   diagGrid: document.getElementById("diagGrid"),
@@ -101,6 +101,51 @@ const MODE_LABELS = {
   offline: { title: "Offline", desc: "Host plays solo" }
 };
 
+// ------------------------------------------------------------
+// Fullscreen toggle (cross-browser, with graceful no-op fallback
+// on browsers - notably iOS Safari - that don't support it)
+// ------------------------------------------------------------
+function isFullscreen() {
+  return Boolean(
+    document.fullscreenElement || document.webkitFullscreenElement ||
+    document.mozFullScreenElement || document.msFullscreenElement
+  );
+}
+function requestFS() {
+  const root = document.documentElement;
+  const fn = root.requestFullscreen || root.webkitRequestFullscreen || root.mozRequestFullScreen || root.msRequestFullscreen;
+  if (!fn) return;
+  try {
+    const p = fn.call(root);
+    if (p && p.catch) p.catch(() => {});
+  } catch (e) { /* ignore - not supported here */ }
+}
+function exitFS() {
+  const fn = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+  if (!fn) return;
+  try {
+    const p = fn.call(document);
+    if (p && p.catch) p.catch(() => {});
+  } catch (e) { /* ignore */ }
+}
+el.fullscreenBtn.addEventListener("click", () => {
+  if (isFullscreen()) exitFS();
+  else requestFS();
+});
+["fullscreenchange", "webkitfullscreenchange", "mozfullscreenchange", "MSFullscreenChange"].forEach((evt) => {
+  document.addEventListener(evt, () => {
+    const fs = isFullscreen();
+    el.fullscreenBtn.classList.toggle("active", fs);
+    el.fullscreenBtn.setAttribute("aria-label", fs ? "Exit fullscreen" : "Enter fullscreen");
+    setRealViewportHeight();
+    lastTilesSignature = "";
+    if (lastState) renderTiles(lastState.game);
+  });
+});
+
+// ------------------------------------------------------------
+// Manual, host-only scratchpad coloring
+// ------------------------------------------------------------
 const CYCLE = [null, "absent", "present", "correct"];
 let manualKeyColors = {};
 let manualTileColors = {};
@@ -145,10 +190,12 @@ function paintKeyboard() {
   });
 }
 
+// Two balanced rows of 13, alphabetical - easy to scan as a deduction
+// board rather than a typing keyboard (nobody types on this; it's a
+// host-only click-to-mark scratchpad).
 const KEYBOARD_ROWS = [
-  ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
-  ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
-  ["z", "x", "c", "v", "b", "n", "m"]
+  ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m"],
+  ["n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"]
 ];
 for (const row of KEYBOARD_ROWS) {
   const rowEl = document.createElement("div");
@@ -162,6 +209,13 @@ for (const row of KEYBOARD_ROWS) {
     rowEl.appendChild(key);
   }
   el.keyboard.appendChild(rowEl);
+}
+function applyKeyMetrics(metrics) {
+  el.keyboard.querySelectorAll(".key").forEach((key) => {
+    key.style.width = metrics.tileSize + "px";
+    key.style.height = metrics.tileHeight + "px";
+    key.style.fontSize = metrics.fontSize + "px";
+  });
 }
 
 el.resetColorsBtn.addEventListener("click", resetManualColors);
@@ -182,6 +236,7 @@ function syncStagedSettingsFromState(g) {
   el.difficultySelect.value = g.difficulty;
   el.autoContinueToggle.checked = g.autoContinue;
   el.delayInput.value = g.autoContinueDelaySeconds;
+  el.leaderboardShowInput.value = g.leaderboardShowSeconds;
   updateModePickerLabel();
 }
 
@@ -197,12 +252,6 @@ el.controlsHandle.addEventListener("click", () => {
   const expanded = el.controlsHandle.getAttribute("aria-expanded") === "true";
   el.controlsHandle.setAttribute("aria-expanded", String(!expanded));
   el.controlsBody.classList.toggle("collapsed", expanded);
-});
-
-el.activityToggle.addEventListener("click", () => {
-  const expanded = el.activityToggle.getAttribute("aria-expanded") === "true";
-  el.activityToggle.setAttribute("aria-expanded", String(!expanded));
-  el.ticker.classList.toggle("collapsed", expanded);
 });
 
 el.diagToggle.addEventListener("click", () => {
@@ -303,9 +352,16 @@ el.applyBtn.addEventListener("click", () => {
     wordLength: Number(el.wordLengthSelect.value),
     difficulty: el.difficultySelect.value,
     autoContinue: el.autoContinueToggle.checked,
-    autoContinueDelaySeconds: Number(el.delayInput.value) || 12
+    autoContinueDelaySeconds: Number(el.delayInput.value) || 3
   });
   closeDrawer(el.settingsOverlay);
+});
+
+// Leaderboard-show duration applies immediately, without restarting
+// the round (unlike the rest of Settings, which is bundled behind
+// the "Apply & start new round" button above).
+el.leaderboardShowInput.addEventListener("change", () => {
+  send("set_leaderboard_show_seconds", { seconds: Number(el.leaderboardShowInput.value) || 3 });
 });
 
 el.playAgainBtn.addEventListener("click", () => send("play_again", {}));
@@ -355,6 +411,9 @@ function handleOfflineGuessResult(result) {
   }
 }
 
+// ------------------------------------------------------------
+// Rejection toast - brief but readable, auto-dismissing
+// ------------------------------------------------------------
 let lastShownRejectionAt = 0;
 let rejectionHideTimer = null;
 function maybeShowRejection(g) {
@@ -368,9 +427,49 @@ function maybeShowRejection(g) {
   el.rejectionToast.style.animation = "";
 
   clearTimeout(rejectionHideTimer);
-  rejectionHideTimer = setTimeout(() => { el.rejectionToast.hidden = true; }, 950);
+  rejectionHideTimer = setTimeout(() => { el.rejectionToast.hidden = true; }, 2400);
 }
 
+// ------------------------------------------------------------
+// Win celebration: confetti + winner callout + auto-popup leaderboard
+// ------------------------------------------------------------
+const CONFETTI_COLORS = ["#ffb100", "#ff3b4e", "#16d976", "#7c5cff", "#f6f4ef"];
+function spawnConfetti() {
+  const count = 70;
+  for (let i = 0; i < count; i++) {
+    const piece = document.createElement("div");
+    piece.className = "confettiPiece";
+    piece.style.left = Math.random() * 100 + "vw";
+    piece.style.background = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
+    const duration = 1.6 + Math.random() * 1.3;
+    piece.style.animationDuration = duration + "s";
+    piece.style.animationDelay = (Math.random() * 0.3) + "s";
+    el.confettiLayer.appendChild(piece);
+    setTimeout(() => piece.remove(), (duration + 0.6) * 1000);
+  }
+}
+
+let winLeaderboardTimer = null;
+function triggerWinCelebration(g) {
+  spawnConfetti();
+  activeLeaderboardTab = "round";
+  openDrawer(el.leaderboardOverlay);
+  renderLeaderboardTab();
+  const seconds = g.leaderboardShowSeconds || 3;
+  clearTimeout(winLeaderboardTimer);
+  winLeaderboardTimer = setTimeout(() => { closeDrawer(el.leaderboardOverlay); }, seconds * 1000);
+}
+
+let wasWon = false;
+function detectWinTransition(g) {
+  const isWon = g.status === "won";
+  if (isWon && !wasWon) triggerWinCelebration(g);
+  wasWon = isWon;
+}
+
+// ------------------------------------------------------------
+// Rendering
+// ------------------------------------------------------------
 const CONNECTION_LABELS = {
   idle: "Idle", connecting: "Connecting…", retrying: "Retrying…",
   live: "LIVE", test_mode: "Simulating (Test Mode)", error: "Connection issue", disconnected: "Disconnected"
@@ -382,9 +481,10 @@ let wasFreshRoundStart = false;
 function render(state) {
   lastState = state;
   detectFreshRound(state.game);
+  detectWinTransition(state.game);
   renderHeader(state);
   renderModeUI(state.game);
-  renderStats(state.game);
+  renderLengthBadge(state.game);
   renderTiles(state.game);
   renderHintChips(state.game);
   renderModeNotes(state.game);
@@ -392,7 +492,6 @@ function render(state) {
   renderKeyboardVisibility(state.game);
   paintKeyboard();
   maybeShowRejection(state.game);
-  renderTicker(state.recentComments);
   renderSettingsChips(state);
   renderDiagnostics(state.diagnostics);
   if (!el.leaderboardOverlay.hidden) renderLeaderboardTab();
@@ -418,21 +517,48 @@ function renderModeUI(g) {
   el.offlineControls.hidden = g.mode !== "offline";
 }
 
-function renderStats(g) {
-  el.guessesStat.textContent = g.status === "idle" ? "—" : String(g.guessesMade);
-  el.lengthStat.textContent = g.status === "idle" ? "—" : g.wordLength + " letters";
+function renderLengthBadge(g) {
+  el.lengthBadge.textContent = g.status === "idle" ? "— letters" : g.wordLength + " letters";
 }
 
-function computeTileMetrics(wordLength) {
+// Tile sizing combines two constraints so guesses always sit on one
+// line AND every guess made this round is visible without scrolling:
+//   - width:  sized as if the word were at least 17 letters long, so
+//             sizing stays visually consistent across rounds instead
+//             of ballooning for short words
+//   - height: shrinks further if there are enough guess rows that
+//             they wouldn't otherwise all fit in the visible area
+// The keyboard is sized to match exactly (see applyKeyMetrics).
+function computeAvailableTilesHeight() {
+  const viewportH = window.innerHeight;
+  const top = el.tilesWrap.getBoundingClientRect().top;
+  const reserveBelow = 230; // banners, footer controls, safety margin
+  return Math.max(80, viewportH - top - reserveBelow);
+}
+
+function computeTileMetrics(wordLength, rowCount) {
   const containerWidth = el.tilesWrap.clientWidth || 320;
-  const countsReserve = wordLength > 14 ? 30 : 42; // countsCol width + its gap
-  const usable = Math.max(100, containerWidth - countsReserve);
-  const gap = wordLength > 14 ? 2 : wordLength > 10 ? 3 : 6;
-  let tileSize = Math.floor((usable - gap * (wordLength - 1)) / wordLength);
-  tileSize = Math.max(8, Math.min(40, tileSize));
+  // effectiveLength is always >= 17, so every word length from 4-17
+  // resolves to the exact same width-based tile size - the "as if it
+  // were a 17-letter word" baseline. Lengths beyond 17 shrink further.
+  const effectiveLength = Math.max(wordLength, 17);
+  const countsReserve = 30;
+  const hGap = 2;
+  const usableWidth = Math.max(100, containerWidth - countsReserve);
+  let tileSizeByWidth = Math.floor((usableWidth - hGap * (effectiveLength - 1)) / effectiveLength);
+  tileSizeByWidth = Math.max(8, Math.min(40, tileSizeByWidth));
+
+  const availableHeight = computeAvailableTilesHeight();
+  const vGap = 8;
+  const rows = Math.max(1, rowCount);
+  const rowHeightBudget = Math.floor((availableHeight - vGap * (rows - 1)) / rows);
+  let tileSizeByHeight = Math.floor(rowHeightBudget / 1.18);
+  tileSizeByHeight = Math.max(8, Math.min(40, tileSizeByHeight));
+
+  const tileSize = Math.max(8, Math.min(tileSizeByWidth, tileSizeByHeight));
   const tileHeight = Math.round(tileSize * 1.18);
-  const fontSize = Math.max(8, Math.round(tileSize * 0.42));
-  return { tileSize, tileHeight, fontSize, gap, tight: wordLength > 14 };
+  const fontSize = Math.max(7, Math.round(tileSize * 0.42));
+  return { tileSize, tileHeight, fontSize, gap: hGap, tight: true };
 }
 
 function buildGuessBlock(guess, wordLength, metrics) {
@@ -481,7 +607,9 @@ function renderTiles(g) {
   el.tilesWrap.innerHTML = "";
   if (g.status === "idle") return;
 
-  const metrics = computeTileMetrics(g.wordLength);
+  const rowCount = g.guesses.length + (g.status === "live" ? 1 : 0);
+  const metrics = computeTileMetrics(g.wordLength, rowCount);
+  applyKeyMetrics(metrics);
 
   if (g.status === "live") {
     el.tilesWrap.appendChild(buildGuessBlock(null, g.wordLength, metrics));
@@ -505,7 +633,6 @@ function renderHintChips(g) {
 }
 
 function renderModeNotes(g) {
-  el.liveNote.hidden = !(g.status === "live" && g.mode === "live");
   el.offlineNote.hidden = !(g.status === "live" && g.mode === "offline");
 }
 
@@ -515,8 +642,14 @@ function renderBanners(g) {
 
   if (g.status === "won") {
     const lastGuess = g.guesses[g.guesses.length - 1];
+    const word = (g.lastWinInfo && g.lastWinInfo.word) || (lastGuess && lastGuess.word) || "";
     el.resultBanner.className = "resultBanner win";
-    el.resultText.textContent = '🎉 Solved it! The word was "' + ((lastGuess && lastGuess.word ? lastGuess.word : "").toUpperCase()) + '".';
+    if (g.lastWinInfo && g.lastWinInfo.username) {
+      const pointsPart = typeof g.lastWinInfo.points === "number" ? " — +" + g.lastWinInfo.points + " points" : "";
+      el.resultText.textContent = "🎉 " + g.lastWinInfo.username + ' solved it! "' + word.toUpperCase() + '"' + pointsPart;
+    } else {
+      el.resultText.textContent = '🎉 Solved it! The word was "' + word.toUpperCase() + '".';
+    }
   } else if (g.status === "lost") {
     el.resultBanner.className = "resultBanner lost";
     el.resultText.textContent = '⏱ Round ended. The word was "' + ((g.secretWord || "").toUpperCase()) + '".';
@@ -531,18 +664,7 @@ function renderBanners(g) {
 }
 
 function renderKeyboardVisibility(g) {
-  el.keyboard.style.display = g.status === "live" ? "flex" : "none";
-  el.resetColorsBtn.style.display = g.status === "live" ? "inline-flex" : "none";
-}
-
-function renderTicker(comments) {
-  if (!comments || comments.length === 0) {
-    el.ticker.innerHTML = '<li class="empty">Waiting for chat to arrive…</li>';
-    return;
-  }
-  el.ticker.innerHTML = comments
-    .map((c) => '<li><span class="tkUser">' + escapeHtml(c.username) + '</span><span class="tkText">' + escapeHtml(c.text) + "</span></li>")
-    .join("");
+  el.keyboardSection.style.display = g.status === "live" ? "block" : "none";
 }
 
 function renderSettingsChips(state) {

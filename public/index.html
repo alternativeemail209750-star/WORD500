@@ -14,6 +14,8 @@
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
+  <div class="confettiLayer" id="confettiLayer" aria-hidden="true"></div>
+
   <div class="app" id="app">
 
     <header class="topbar">
@@ -26,10 +28,12 @@
       </div>
       <div class="toolbarRow">
         <span class="modeBadge" id="modeBadge">TEST</span>
+        <span class="lengthBadge" id="lengthBadge">— letters</span>
         <button class="iconBtn" id="hintBtn" type="button" aria-label="Use a hint">💡</button>
         <button class="iconBtn" id="helpBtn" type="button" aria-label="How to play">❓</button>
         <button class="iconBtn" id="leaderboardBtn" type="button" aria-label="Leaderboard">🏆</button>
         <button class="iconBtn" id="settingsBtn" type="button" aria-label="Settings">⚙️</button>
+        <button class="iconBtn" id="fullscreenBtn" type="button" aria-label="Enter fullscreen">⛶</button>
       </div>
     </header>
 
@@ -38,15 +42,12 @@
     <main class="stage" id="stage">
       <section class="round-card">
 
-        <div class="statsRow">
-          <div class="statBox">
-            <span class="statLabel">Guesses made</span>
-            <span class="statValue" id="guessesStat">—</span>
+        <div class="keyboardSection" id="keyboardSection">
+          <div class="keyboardHead">
+            <span class="keyboardTitle">Keyboard</span>
+            <button class="linkBtn" id="resetColorsBtn" type="button">Reset colors</button>
           </div>
-          <div class="statBox">
-            <span class="statLabel">Word length</span>
-            <span class="statValue" id="lengthStat">—</span>
-          </div>
+          <div class="keyboard" id="keyboard"></div>
         </div>
 
         <div class="tilesWrap" id="tilesWrap"></div>
@@ -55,10 +56,6 @@
 
         <div class="offlineNote" id="offlineNote" hidden>
           <p>Solo practice — type your guess in the box below.</p>
-        </div>
-
-        <div class="liveNote" id="liveNote" hidden>
-          <p>Unlimited guessing — anyone in chat can guess anytime. A guess only counts if it still fits every clue so far.</p>
         </div>
 
         <div class="resultBanner" id="resultBanner" hidden>
@@ -71,18 +68,6 @@
           <p>Open <strong>Settings</strong> (⚙️ top right) to choose a mode, word length, and difficulty, then tap Apply to begin.</p>
         </div>
 
-        <div class="keyboardHead">
-          <p class="keyboardNote">Host-only scratchpad — click any letter (or letter tile) to mark it.</p>
-          <button class="linkBtn" id="resetColorsBtn" type="button">Reset colors</button>
-        </div>
-        <div class="keyboard" id="keyboard"></div>
-
-        <button class="activityToggle" id="activityToggle" type="button" aria-expanded="false">
-          <span>Live activity</span><span class="chev" id="activityChev">▾</span>
-        </button>
-        <ul class="ticker collapsed" id="ticker">
-          <li class="empty">Waiting for chat to arrive…</li>
-        </ul>
       </section>
     </main>
 
@@ -198,12 +183,21 @@
         </label>
         <div class="row" id="delayRow">
           <label class="fieldLabel delayLabel">Delay before next round (seconds)</label>
-          <input type="number" id="delayInput" class="textInput selectNarrow" min="3" max="120" value="12" />
+          <input type="number" id="delayInput" class="textInput selectNarrow" min="3" max="120" value="3" />
+        </div>
+      </div>
+
+      <div class="drawerSection">
+        <h4>Win celebration</h4>
+        <p class="sectionNote">After a win, the leaderboard pops up automatically, then closes on its own.</p>
+        <div class="row">
+          <label class="fieldLabel delayLabel">Show leaderboard for (seconds)</label>
+          <input type="number" id="leaderboardShowInput" class="textInput selectNarrow" min="1" max="30" value="3" />
         </div>
       </div>
 
       <button class="btn btnGold btnFull" id="applyBtn" type="button">Apply settings &amp; start new round</button>
-      <p class="sectionNote">Changes here only take effect once you tap Apply.</p>
+      <p class="sectionNote">Word length, difficulty, auto-continue and this delay only take effect once you tap Apply. Win-celebration duration applies right away.</p>
 
       <div class="drawerSection">
         <h4>
@@ -276,7 +270,7 @@
         <li>Each guess only reveals <em>counts</em>: <span class="legendTile correct">green</span> = right letter &amp; spot, <span class="legendTile present">yellow</span> = right letter, wrong spot, <span class="legendTile absent">red</span> = not in the word. Never which letters — that's the puzzle.</li>
         <li>A guess is only accepted if it still fits every clue so far. One that contradicts an earlier clue flashes a quick reason and is skipped.</li>
         <li>The keyboard (and each guessed word) is your own click-to-mark scratchpad — host only, the game never colors it for you.</li>
-        <li>💡 unlimited hints suggest a word that fits the clues (never the answer). Difficulty (Normal/Medium/Hard) sets how tricky the word itself is.</li>
+        <li>💡 unlimited hints suggest a word that fits the clues (never the answer). Difficulty (Normal/Medium/Hard/Random) sets how tricky the word itself is.</li>
         <li><strong>Live</strong> = real TikTok chat. <strong>Test</strong> = simulated chat, nothing saved. <strong>Offline</strong> = just you, type guesses directly.</li>
       </ul>
       <button class="btn btnGold" id="closeHowTo2" type="button">Got it</button>

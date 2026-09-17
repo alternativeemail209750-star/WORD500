@@ -16,41 +16,66 @@ putting it online.
   - 🟨 Yellow — right letter, wrong spot
   - 🟥 Red — not in the word
 - **A guess only counts if it still fits every clue so far.** If it
-  contradicts an earlier guess's counts, it's rejected instantly with
-  a brief on-screen note (visible for under a second) explaining which
-  earlier guess it conflicts with — this is what keeps unlimited
-  guessing meaningful instead of just spamming random words. One neat
-  side effect: a wrong word can never be validly guessed twice, since
-  repeating it would contradict its own first (non-winning) result.
-- The keyboard — and every letter tile in every guessed word — is a
-  **host-only, click-to-mark scratchpad**. Click to cycle a letter red
-  → yellow → green → none. The game never colors anything for you;
-  letters that have appeared in any guess just get a subtly darker
-  shade so you can see what's been tried, regardless of your own
-  marks.
+  contradicts an earlier guess's counts, it's rejected with a brief
+  on-screen note explaining which earlier guess it conflicts with —
+  this is what keeps unlimited guessing meaningful instead of just
+  spamming random words.
+- The keyboard — now its own section at the top of the board, sized to
+  match the guessed-word tiles — and every letter tile in every
+  guessed word, is a **host-only, click-to-mark scratchpad**. Click to
+  cycle a letter red → yellow → green → none. The game never colors
+  anything for you; letters that have appeared in any guess get a
+  subtly darker shade so you can see what's been tried, independent of
+  your own marks.
 - 💡 **Hints are unlimited** and suggest a word consistent with every
   clue so far — never the literal answer.
-- **Difficulty** (Normal / Medium / Hard) controls which secret words
-  are eligible — see the difficulty engine section below. It changes
-  how hard the word itself is to deduce, not how much information you
-  get or how many guesses you're allowed.
+- **Difficulty** — Normal / Medium / Hard / **Random** — controls which
+  secret words are eligible. Random skips the difficulty engine
+  entirely and draws from every word of that length, easy to
+  extremely hard.
+- **When a round is won:** confetti plays, the result banner names who
+  solved it (and how many points they earned, in Live mode), and the
+  leaderboard pops up automatically for a few seconds before closing
+  on its own — both the pop-up duration and the auto-continue delay
+  before the next round are configurable in Settings.
 
 **Three modes**, each with a slightly different bottom control bar:
 
 - **Live** — connects to your real TikTok LIVE chat; every matching
   comment is evaluated as a guess in real time. Scores count toward
   the leaderboard. You can also type in the secret word yourself at
-  any time from the bottom bar (handy if you want to steer toward a
-  specific word mid-show).
+  any time from the bottom bar.
 - **Test** — the same mechanics with simulated fake chat, and scores
-  are **not** saved. Also has its own "set the secret word" box, so
-  you can test an exact scenario instead of a random word.
+  are **not** saved. Also has its own "set the secret word" box.
 - **Offline** — just you. A guess box at the bottom lets you type
   directly — no chat, no leaderboard, solo practice.
 
 ---
 
-## 2. The difficulty engine (Normal / Medium / Hard)
+## 2. The board layout
+
+- **Keyboard first, its own section**, right at the top of the round
+  card — clearly visible above the guessed words, not buried below a
+  chat feed.
+- **Guesses always fit on one line**, word on the left and its
+  green/yellow/red counts stacked on the right, no matter how long the
+  word is — tile size (and the keyboard's key size, to match) is
+  computed from the real screen width every time, not a fixed
+  breakpoint.
+- **Every guess made this round stays visible without scrolling.**
+  Tiles are sized as if the word were at least 17 letters long by
+  default (so sizing looks the same whether you're playing a 5-letter
+  or 17-letter round), and shrink further automatically once there are
+  enough guesses that they wouldn't otherwise all fit on screen.
+- ⛶ in the top-right toggles **fullscreen** on/off (works on desktop
+  and Android browsers; iOS Safari doesn't support fullscreening a web
+  page, so the button will simply do nothing there).
+- The old "Live activity" chat-comment feed has been removed entirely
+  to keep the board focused and uncluttered by chat noise.
+
+---
+
+## 3. The difficulty engine (Normal / Medium / Hard / Random)
 
 Since guessing is unlimited and fully automated, difficulty can't come
 from restricting attempts — it comes from **which secret word gets
@@ -64,30 +89,24 @@ harder) across four factors, then buckets it:
 | **Ambiguity** | How many other same-length words look similar (share most of their letters) — more look-alikes means more genuine deduction work |
 | **Information** | A proxy for how much a single count actually narrows things down (repeated letters blur a count's meaning) |
 
-The four scores are combined with configurable weights
-(`DIFFICULTY_WEIGHTS`) into one score, then bucketed by configurable
+The four scores combine with configurable weights
+(`DIFFICULTY_WEIGHTS`) into one score, then bucket by configurable
 thresholds (`DIFFICULTY_THRESHOLDS`, default: 0-35 Normal, 36-65
-Medium, 66-100 Hard). Both live at the top of `difficulty.js` and are
-safe to tune without touching any scoring logic.
+Medium, 66-100 Hard). **Random** bypasses this scoring entirely and
+draws from the full word pool for that length. All of this lives at
+the top of `difficulty.js` and is safe to tune without touching any
+scoring logic.
 
 **Honest limitation:** vocabulary familiarity is a heuristic proxy
 (word length + letter rarity + a hand-picked common-word list), not a
-real frequency corpus — there's no internet-scale word-frequency
-dataset wired in. It's a reasonable approximation, not a guarantee.
-Also, very short (4-letter) and very long (18-20 letter) word pools
-are small and structurally uniform, so they may cluster into one tier
-— the game gracefully falls back to the full pool for that length if
-a tier has nothing to offer.
-
-**Built to extend:** `difficulty.js` is a standalone module (scoring
-functions + `getWordsForDifficulty()`) so future modes — Speed Round,
-Double Letter, Rare Letter, Trick Word, Boss Round, etc. — can layer
-new selection or timing rules on top without touching the scoring
-engine itself.
+real frequency corpus. Very short (4-letter) and very long (18-20
+letter) word pools are small and structurally uniform, so they may
+cluster into one tier — the game gracefully falls back to the full
+pool for that length if a tier has nothing to offer.
 
 ---
 
-## 3. One-time setup: get a signing key (do this first)
+## 4. One-time setup: get a signing key (do this first)
 
 TikTok doesn't publish an official way for outside apps to read LIVE
 chat, so this app uses a well-known, widely-used service called
@@ -96,14 +115,14 @@ without a key, Live mode won't be able to connect.
 
 1. Go to **https://www.eulerstream.com** and create a free account.
 2. Once logged in, find your **API key** on your dashboard.
-3. Copy it somewhere safe — you'll paste it into Render in step 5.
+3. Copy it somewhere safe — you'll paste it into Render in step 6.
 
 You can skip this for now if you only want **Test** or **Offline** mode
 to start with, but you'll need it before using Live mode.
 
 ---
 
-## 4. Step 1 — Put the code on GitHub
+## 5. Step 1 — Put the code on GitHub
 
 1. Download all the files into one folder on your computer. Keep the
    `public` folder as a folder — don't rename or flatten it.
@@ -142,7 +161,7 @@ the `public` folder by itself — this is the #1 cause of a "Cannot GET
 
 ---
 
-## 5. Step 2 — Create the Render web service
+## 6. Step 2 — Create the Render web service
 
 1. Go to **https://render.com** and log in.
 2. Click **New +** → **Web Service**.
@@ -174,18 +193,19 @@ minutes before going live so it's already awake.
 
 ---
 
-## 6. Step 3 — Try Test Mode, then Offline Mode
+## 7. Step 3 — Try Test Mode, then Offline Mode
 
 1. Open your Render URL.
 2. Tap ⚙️ **Settings** → tap the **Mode** row → choose **Test** → pick a
    word length and difficulty → **Apply settings & start new round**.
 3. In the bottom bar, try the **"Set the secret word…"** box to force a
-   specific word, then watch fake viewers guess it — the tile rows fill
-   in with each guess and its green/yellow/red counts, newest at top.
+   specific word, then watch fake viewers guess it — solve it and
+   watch the confetti + winner callout + auto leaderboard pop-up.
 4. Click a few letters on the keyboard (or on a guessed word's tiles)
    to see the manual red → yellow → green → none cycle, then tap
    **Reset colors**.
-5. Now try **Offline**: Settings → Mode → Offline → Apply. A guess box
+5. Try the ⛶ button to toggle fullscreen.
+6. Now try **Offline**: Settings → Mode → Offline → Apply. A guess box
    appears at the bottom — type a real word and press Enter.
 
 **Run through Test Mode after any future change** — the fastest way to
@@ -193,7 +213,7 @@ confirm the game still works before relying on it live.
 
 ---
 
-## 7. Step 4 — Go live with your real TikTok
+## 8. Step 4 — Go live with your real TikTok
 
 1. Start your TikTok LIVE broadcast as normal.
 2. Open ⚙️ **Settings**, set Mode to **Live**, pick a word length and
@@ -211,13 +231,14 @@ confirm the game still works before relying on it live.
 
 ---
 
-## 8. Viewing this on your phone while broadcasting
+## 9. Viewing this on your phone while broadcasting
 
 Since your phone is likely busy running the TikTok LIVE broadcast
 itself, most hosts use a **second device** (tablet, laptop, or a second
 phone) open to the same Render URL to watch the game and tap the
-controls. That second screen can also be pointed at a monitor or
-propped in frame so your audience can see the board.
+controls. That second screen can also be pointed at a monitor, or put
+into fullscreen with the ⛶ button, so your audience can see the board
+clearly.
 
 The page is still built to behave well on a single phone: the header
 stays pinned to the top, and the host controls stay pinned to the
@@ -225,7 +246,7 @@ bottom, so you can always reach them no matter how far you've scrolled.
 
 ---
 
-## 9. Reading the Diagnostics panel
+## 10. Reading the Diagnostics panel
 
 Diagnostics live inside the ⚙️ Settings panel (scroll down).
 
@@ -241,7 +262,7 @@ Diagnostics live inside the ⚙️ Settings panel (scroll down).
 
 ---
 
-## 10. Troubleshooting common messages
+## 11. Troubleshooting common messages
 
 | Message you might see | What it means | What to do |
 |---|---|---|
@@ -252,21 +273,25 @@ Diagnostics live inside the ⚙️ Settings panel (scroll down).
 | "The signing key was rejected" | The key was mistyped or expired | Copy it again from EulerStream and update it on Render |
 | "Must be exactly N letters…" | Your custom secret word didn't match the selected word length | Retype it to match, or change the word length first |
 | A red toast flashing "Conflicts with guess #…" | Someone's guess contradicted an earlier clue — working as intended | Nothing to fix — this is the core game mechanic |
-| "Cannot GET /" in the browser | The `public` folder didn't upload correctly to GitHub | See the folder-structure note in step 4 |
+| Tapping ⛶ does nothing | Your browser doesn't support the Fullscreen API for web pages | Known on iOS Safari; try Chrome/Android or a desktop browser instead |
+| "Cannot GET /" in the browser | The `public` folder didn't upload correctly to GitHub | See the folder-structure note in step 5 |
 
 ---
 
-## 11. Making changes later (optional)
+## 12. Making changes later (optional)
 
 - **Add or remove possible secret words:** open `answers.js` on GitHub,
   add or edit an entry under the right letter-length key (4 through
   20), and commit. Avoid adding a word that's just another word on the
   list with an "s" added.
 - **Retune difficulty:** open `difficulty.js` and adjust
-  `DIFFICULTY_WEIGHTS` or `DIFFICULTY_THRESHOLDS` at the top — no need
-  to touch the scoring functions themselves.
+  `DIFFICULTY_WEIGHTS` or `DIFFICULTY_THRESHOLDS` at the top.
 - **Change colors:** open `public/style.css` — all colors are defined
   once at the top under `:root`.
+- **Change the default round-to-round delay or win-celebration
+  length:** open `server.js` and adjust `DEFAULT_AUTO_CONTINUE_DELAY`
+  or `DEFAULT_LEADERBOARD_SHOW_SECONDS` near the top of the file (both
+  are also adjustable per-session from Settings, without editing code).
 - Any edit committed on GitHub triggers an automatic redeploy on Render
   within a minute or two.
 
@@ -275,8 +300,8 @@ Diagnostics live inside the ⚙️ Settings panel (scroll down).
 ## What's inside this project (for reference)
 
 - `server.js` — the game engine: the consistency-checked unlimited
-  guessing pipeline, TikTok connection, modes, hints, and both
-  leaderboards.
+  guessing pipeline, TikTok connection, modes, hints, win tracking for
+  the celebration, and both leaderboards.
 - `difficulty.js` — the standalone 4-factor difficulty scoring engine.
 - `answers.js` — the curated list of possible secret words, one array
   per length from 4 to 20 letters.
@@ -285,8 +310,8 @@ Diagnostics live inside the ⚙️ Settings panel (scroll down).
   word, with a small built-in fallback if the download ever fails.
 - `public/index.html`, `public/style.css`, `public/game.js` — the
   screen you and your audience look at, including the manual
-  scratchpad keyboard and per-tile coloring (entirely client-side —
-  the server never sees or uses those marks).
+  scratchpad keyboard, per-tile coloring, confetti, and fullscreen
+  toggle (all entirely client-side except the win data itself).
 - `.env.example` — a reference list of the one setting the app uses.
 - `render.yaml` — an optional shortcut for Render's "Blueprint" deploy
   option, instead of the manual steps above.

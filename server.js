@@ -141,7 +141,8 @@ function formatCounts(c) {
 
 const difficultyIndex = buildDifficultyIndex(ANSWER_WORDS);
 
-const DEFAULT_AUTO_CONTINUE_DELAY = 12;
+const DEFAULT_AUTO_CONTINUE_DELAY = 3;
+const DEFAULT_LEADERBOARD_SHOW_SECONDS = 3;
 
 const game = {
   mode: "test",
@@ -154,13 +155,15 @@ const game = {
   hintsUsed: 0,
   hintSuggestions: [],
   lastRejection: null,
+  lastWinInfo: null, // { username, points, word } - set the instant a round is won
   recentComments: [],
   usedWords: new Set(),
   roundScores: new Map(),
   totalScores: new Map(),
   autoContinue: false,
   autoContinueDelaySeconds: DEFAULT_AUTO_CONTINUE_DELAY,
-  autoContinueAt: null
+  autoContinueAt: null,
+  leaderboardShowSeconds: DEFAULT_LEADERBOARD_SHOW_SECONDS
 };
 
 function clampWordLength(n) {
@@ -200,9 +203,11 @@ function processGuess(word, caller) {
   game.guesses.push({ word, counts, caller });
 
   if (word === game.secretWord) {
+    const points = game.mode === "live" ? 100 : null;
     awardPoints(caller, 100);
     game.status = "won";
     game.streak += 1;
+    game.lastWinInfo = { username: caller, points, word };
   } else {
     awardPoints(caller, 10);
   }
@@ -232,6 +237,7 @@ function startRound(overrideWord) {
   game.hintsUsed = 0;
   game.hintSuggestions = [];
   game.lastRejection = null;
+  game.lastWinInfo = null;
   game.roundScores.clear();
   game.status = "live";
   game.autoContinueAt = null;
@@ -540,8 +546,10 @@ function buildStatePayload() {
       hintsUsed: game.hintsUsed,
       hintSuggestions: game.hintSuggestions,
       lastRejection: game.lastRejection,
+      lastWinInfo: game.lastWinInfo,
       autoContinue: game.autoContinue,
       autoContinueDelaySeconds: game.autoContinueDelaySeconds,
+      leaderboardShowSeconds: game.leaderboardShowSeconds,
       autoContinueSecondsLeft: game.autoContinueAt ? Math.max(0, Math.ceil((game.autoContinueAt - Date.now()) / 1000)) : 0,
       minWordLength: MIN_WORD_LENGTH,
       maxWordLength: MAX_WORD_LENGTH
@@ -661,6 +669,12 @@ function handleClientAction(ws, msg) {
       game.totalScores.clear();
       broadcastState();
       break;
+    case "set_leaderboard_show_seconds": {
+      const v = Number(payload && payload.seconds);
+      game.leaderboardShowSeconds = Number.isFinite(v) ? Math.min(30, Math.max(1, Math.round(v))) : DEFAULT_LEADERBOARD_SHOW_SECONDS;
+      broadcastState();
+      break;
+    }
     default:
       break;
   }
