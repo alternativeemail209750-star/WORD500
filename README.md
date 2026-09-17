@@ -33,11 +33,12 @@ putting it online.
   secret words are eligible. Random skips the difficulty engine
   entirely and draws from every word of that length, easy to
   extremely hard.
-- **When a round is won:** confetti plays, the result banner names who
-  solved it (and how many points they earned, in Live mode), and the
-  leaderboard pops up automatically for a few seconds before closing
-  on its own — both the pop-up duration and the auto-continue delay
-  before the next round are configurable in Settings.
+- **When a round is won:** confetti plays and a floating celebration
+  window walks through three stages automatically — the winner's name
+  and the answer (in large text), then the top scorers for this round,
+  then the all-time top scorers — each shown for a few seconds
+  (configurable in Settings) before closing on its own. Tap ✕ to skip
+  it early.
 
 **Three modes**, each with a slightly different bottom control bar:
 
@@ -57,16 +58,20 @@ putting it online.
 - **Keyboard first, its own section**, right at the top of the round
   card — clearly visible above the guessed words, not buried below a
   chat feed.
-- **Guesses always fit on one line**, word on the left and its
-  green/yellow/red counts stacked on the right, no matter how long the
-  word is — tile size (and the keyboard's key size, to match) is
-  computed from the real screen width every time, not a fixed
-  breakpoint.
-- **Every guess made this round stays visible without scrolling.**
-  Tiles are sized as if the word were at least 17 letters long by
-  default (so sizing looks the same whether you're playing a 5-letter
-  or 17-letter round), and shrink further automatically once there are
-  enough guesses that they wouldn't otherwise all fit on screen.
+- **Guesses always fit on one line**: word tiles on the left, then the
+  green/yellow/red counts as three badges in a row (not stacked), no
+  matter how long the word is — tile size (and the keyboard's key
+  size, to match) is computed from the real screen width every time.
+- Tiles are noticeably larger now — short and medium words render at
+  roughly the biggest size that still leaves room for the horizontal
+  counts row and guarantees no wrapping (on a typical modern phone
+  that's close to double the old size; on very narrow/old phones it's
+  somewhat less, since there's only so much width to go around once
+  the counts row also needs space). Long words (16+ letters) still
+  shrink further automatically to guarantee they never wrap.
+- **Every guess made this round stays visible without scrolling** —
+  rows shrink further automatically once there are enough guesses that
+  they wouldn't otherwise all fit on screen.
 - ⛶ in the top-right toggles **fullscreen** on/off (works on desktop
   and Android browsers; iOS Safari doesn't support fullscreening a web
   page, so the button will simply do nothing there).
@@ -274,6 +279,7 @@ Diagnostics live inside the ⚙️ Settings panel (scroll down).
 | "Must be exactly N letters…" | Your custom secret word didn't match the selected word length | Retype it to match, or change the word length first |
 | A red toast flashing "Conflicts with guess #…" | Someone's guess contradicted an earlier clue — working as intended | Nothing to fix — this is the core game mechanic |
 | Tapping ⛶ does nothing | Your browser doesn't support the Fullscreen API for web pages | Known on iOS Safari; try Chrome/Android or a desktop browser instead |
+| TikTok disconnects every time you apply Settings | This was a bug (older versions of this app force-disconnected on every settings change) | Fixed — changing word length, difficulty, etc. in Live mode no longer touches an already-connected TikTok session |
 | "Cannot GET /" in the browser | The `public` folder didn't upload correctly to GitHub | See the folder-structure note in step 5 |
 
 ---

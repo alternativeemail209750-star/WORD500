@@ -627,8 +627,20 @@ function handleClientAction(ws, msg) {
       break;
     case "apply_settings":
       applySettings(payload || {});
-      if (game.mode === "test") startTestMode();
-      else stopEverything();
+      if (game.mode === "test") {
+        startTestMode();
+      } else if (game.mode === "live") {
+        // Stay connected if we already were - only stop the Test Mode
+        // simulator (if it happened to still be running). This was the
+        // bug: previously ANY apply_settings while in Live mode force-
+        // disconnected TikTok, requiring a manual reconnect every time.
+        if (testModeTimer) {
+          clearInterval(testModeTimer);
+          testModeTimer = null;
+        }
+      } else {
+        stopEverything();
+      }
       break;
     case "play_again":
       playAgain();

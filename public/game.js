@@ -85,6 +85,10 @@ const el = {
 
   leaderboardOverlay: document.getElementById("leaderboardOverlay"),
   closeLeaderboard: document.getElementById("closeLeaderboard"),
+  celebrationOverlay: document.getElementById("celebrationOverlay"),
+  celebrationBody: document.getElementById("celebrationBody"),
+  celebrationDots: document.getElementById("celebrationDots"),
+  closeCelebration: document.getElementById("closeCelebration"),
   tabThisRound: document.getElementById("tabThisRound"),
   tabAllTime: document.getElementById("tabAllTime"),
   leaderboardList: document.getElementById("leaderboardList"),
@@ -449,16 +453,76 @@ function spawnConfetti() {
   }
 }
 
-let winLeaderboardTimer = null;
+let celebrationTimer = null;
+let celebrationStage = 0;
+const CELEBRATION_STAGES = ["winner", "round", "total"];
+
+function renderCelebBoard(list) {
+  if (!list || list.length === 0) {
+    return '<li class="empty">No scores yet</li>';
+  }
+  return list
+    .map((row, i) =>
+      '<li><span class="rank">#' + (i + 1) + '</span><span class="lbName">' + escapeHtml(row.username) + '</span><span class="lbScore">' + row.score + "</span></li>"
+    )
+    .join("");
+}
+
+function showCelebrationStage(stageIndex, g) {
+  const stage = CELEBRATION_STAGES[stageIndex];
+  el.celebrationDots.querySelectorAll(".celebDot").forEach((dot) => {
+    dot.classList.toggle("active", Number(dot.dataset.stage) === stageIndex);
+  });
+
+  if (stage === "winner") {
+    const info = g.lastWinInfo;
+    const winnerName = (info && info.username) || "Someone";
+    const word = ((info && info.word) || "").toUpperCase();
+    const pointsLine = info && typeof info.points === "number" ? '<div class="celebPoints">+' + info.points + " points</div>" : "";
+    el.celebrationBody.innerHTML =
+      '<div class="celebLabel">🎉 Winner</div>' +
+      '<div class="celebWinnerRow">' + escapeHtml(winnerName) + "</div>" +
+      '<div class="celebAnswerRow">' + escapeHtml(word) + "</div>" +
+      pointsLine;
+  } else if (stage === "round") {
+    el.celebrationBody.innerHTML =
+      '<div class="celebBoardTitle">🏆 Top scorers this round</div>' +
+      '<ul class="celebBoardList">' + renderCelebBoard(lastState ? lastState.roundLeaderboard : []) + "</ul>";
+  } else {
+    el.celebrationBody.innerHTML =
+      '<div class="celebBoardTitle">👑 All-time top scorers</div>' +
+      '<ul class="celebBoardList">' + renderCelebBoard(lastState ? lastState.totalLeaderboard : []) + "</ul>";
+  }
+}
+
+function hideCelebration() {
+  clearTimeout(celebrationTimer);
+  el.celebrationOverlay.hidden = true;
+}
+
+function advanceCelebration(g) {
+  celebrationStage += 1;
+  if (celebrationStage >= CELEBRATION_STAGES.length) {
+    hideCelebration();
+    return;
+  }
+  showCelebrationStage(celebrationStage, g);
+  const seconds = g.leaderboardShowSeconds || 3;
+  celebrationTimer = setTimeout(() => advanceCelebration(g), seconds * 1000);
+}
+
 function triggerWinCelebration(g) {
   spawnConfetti();
-  activeLeaderboardTab = "round";
-  openDrawer(el.leaderboardOverlay);
-  renderLeaderboardTab();
+  celebrationStage = 0;
+  el.celebrationOverlay.hidden = false;
+  showCelebrationStage(0, g);
   const seconds = g.leaderboardShowSeconds || 3;
-  clearTimeout(winLeaderboardTimer);
-  winLeaderboardTimer = setTimeout(() => { closeDrawer(el.leaderboardOverlay); }, seconds * 1000);
+  clearTimeout(celebrationTimer);
+  celebrationTimer = setTimeout(() => advanceCelebration(g), seconds * 1000);
 }
+
+el.closeCelebration.addEventListener("click", hideCelebration);
+el.celebrationOverlay.addEventListener("click", (e) => { if (e.target === el.celebrationOverlay) hideCelebration(); });
 
 let wasWon = false;
 function detectWinTransition(g) {
@@ -538,22 +602,35 @@ function computeAvailableTilesHeight() {
 
 function computeTileMetrics(wordLength, rowCount) {
   const containerWidth = el.tilesWrap.clientWidth || 320;
-  // effectiveLength is always >= 17, so every word length from 4-17
-  // resolves to the exact same width-based tile size - the "as if it
-  // were a 17-letter word" baseline. Lengths beyond 17 shrink further.
-  const effectiveLength = Math.max(wordLength, 17);
-  const countsReserve = 30;
   const hGap = 2;
+  // Counts are now a horizontal row of 3 badges beside the tiles
+  // (green, yellow, red), which needs more width than the old
+  // stacked column did.
+  const countsReserve = 70;
   const usableWidth = Math.max(100, containerWidth - countsReserve);
-  let tileSizeByWidth = Math.floor((usableWidth - hGap * (effectiveLength - 1)) / effectiveLength);
-  tileSizeByWidth = Math.max(8, Math.min(40, tileSizeByWidth));
+
+  // Preferred size: the old "as if it's a 17-letter word" baseline,
+  // doubled. This is what short/medium rounds render at.
+  const baselineLength = 17;
+  let baselineSize = Math.floor((usableWidth - hGap * (baselineLength - 1)) / baselineLength);
+  baselineSize = Math.max(8, baselineSize) * 2;
+  baselineSize = Math.min(90, baselineSize);
+
+  // Hard constraint: whatever the actual word length is, it must
+  // still fit on one line - this is what makes genuinely long rounds
+  // (16-20 letters) shrink back down even though short rounds get to
+  // use the doubled baseline above.
+  let actualFitSize = Math.floor((usableWidth - hGap * (wordLength - 1)) / wordLength);
+  actualFitSize = Math.max(8, actualFitSize);
+
+  let tileSizeByWidth = Math.min(baselineSize, actualFitSize);
 
   const availableHeight = computeAvailableTilesHeight();
   const vGap = 8;
   const rows = Math.max(1, rowCount);
   const rowHeightBudget = Math.floor((availableHeight - vGap * (rows - 1)) / rows);
   let tileSizeByHeight = Math.floor(rowHeightBudget / 1.18);
-  tileSizeByHeight = Math.max(8, Math.min(40, tileSizeByHeight));
+  tileSizeByHeight = Math.max(8, Math.min(90, tileSizeByHeight));
 
   const tileSize = Math.max(8, Math.min(tileSizeByWidth, tileSizeByHeight));
   const tileHeight = Math.round(tileSize * 1.18);

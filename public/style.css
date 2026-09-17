@@ -206,9 +206,9 @@ button { cursor: pointer; }
   50% { box-shadow: 0 0 0 4px rgba(255, 177, 0, 0.12); }
 }
 
-.countsCol { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
-.countsCol.tight { gap: 2px; }
-.countsCol.tight .countBadge { min-width: 22px; height: 14px; font-size: 9px; border-radius: 4px; padding: 0 4px; }
+.countsCol { display: flex; flex-direction: row; gap: 3px; flex-shrink: 0; align-items: center; }
+.countsCol.tight { gap: 3px; }
+.countsCol.tight .countBadge { min-width: 20px; height: 18px; font-size: 10px; border-radius: 4px; padding: 0 3px; }
 .countBadge {
   min-width: 30px;
   height: 18px;
@@ -639,3 +639,96 @@ button { cursor: pointer; }
   0% { transform: translateY(0) rotate(0deg); opacity: 1; }
   100% { transform: translateY(105vh) rotate(540deg); opacity: 0.3; }
 }
+
+/* ============================================================
+   Win celebration: sequence of centered floating windows
+   ============================================================ */
+.celebrationOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(4, 5, 14, 0.72);
+  backdrop-filter: blur(4px);
+}
+.celebrationOverlay[hidden] { display: none; }
+
+.celebrationCard {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  background: linear-gradient(180deg, var(--panel-light), var(--panel));
+  border: 1px solid rgba(255, 177, 0, 0.4);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 0 1px rgba(255, 177, 0, 0.08), 0 30px 60px rgba(2, 3, 12, 0.7);
+  padding: 30px 22px 20px;
+  text-align: center;
+  animation: celeb-pop 0.32s cubic-bezier(0.2, 0.8, 0.3, 1.2);
+}
+@keyframes celeb-pop {
+  0% { transform: scale(0.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.celebrationClose {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.celebrationBody { min-height: 140px; display: flex; flex-direction: column; justify-content: center; gap: 10px; }
+
+.celebLabel {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.celebWinnerRow {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+  color: var(--text);
+  word-break: break-word;
+}
+.celebAnswerRow {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 36px;
+  letter-spacing: 0.03em;
+  color: var(--success);
+  text-shadow: 0 0 22px rgba(22, 217, 118, 0.4);
+  word-break: break-word;
+  margin-top: 2px;
+}
+.celebPoints { font-size: 13px; color: var(--gold-dim); font-weight: 600; }
+
+.celebBoardTitle {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+.celebBoardList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+.celebBoardList li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(246, 244, 239, 0.04);
+  font-size: 14px;
+}
+.celebBoardList li.empty { color: var(--muted); justify-content: center; text-align: center; }
+.celebBoardList .rank { font-family: var(--font-display); font-weight: 700; color: var(--gold-dim); width: 20px; flex-shrink: 0; }
+.celebBoardList li:nth-child(1) .rank { color: var(--gold); }
+.celebBoardList .lbName { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.celebBoardList .lbScore { font-weight: 700; }
+
+.celebrationDots { display: flex; justify-content: center; gap: 6px; margin-top: 18px; }
+.celebDot { width: 6px; height: 6px; border-radius: 50%; background: rgba(246, 244, 239, 0.18); }
+.celebDot.active { background: var(--gold); }
