@@ -75,6 +75,7 @@ const el = {
   autoContinueToggle: document.getElementById("autoContinueToggle"),
   delayInput: document.getElementById("delayInput"),
   leaderboardShowInput: document.getElementById("leaderboardShowInput"),
+  rejectionToastShowInput: document.getElementById("rejectionToastShowInput"),
   applyBtn: document.getElementById("applyBtn"),
   diagToggle: document.getElementById("diagToggle"),
   diagGrid: document.getElementById("diagGrid"),
@@ -262,6 +263,7 @@ function syncStagedSettingsFromState(g) {
   el.autoContinueToggle.checked = g.autoContinue;
   el.delayInput.value = g.autoContinueDelaySeconds;
   el.leaderboardShowInput.value = g.leaderboardShowSeconds;
+  el.rejectionToastShowInput.value = g.rejectionToastSeconds;
   updateModePickerLabel();
 }
 
@@ -389,6 +391,12 @@ el.leaderboardShowInput.addEventListener("change", () => {
   send("set_leaderboard_show_seconds", { seconds: Number(el.leaderboardShowInput.value) || 3 });
 });
 
+// Same immediate-apply pattern for how long a rejection message stays
+// on screen - no need to restart the round for this one either.
+el.rejectionToastShowInput.addEventListener("change", () => {
+  send("set_rejection_toast_seconds", { seconds: Number(el.rejectionToastShowInput.value) || 4 });
+});
+
 el.playAgainBtn.addEventListener("click", () => send("play_again", {}));
 el.giveUpBtn.addEventListener("click", () => send("give_up", {}));
 el.hintBtn.addEventListener("click", () => send("use_hint", {}));
@@ -437,7 +445,11 @@ function handleOfflineGuessResult(result) {
 }
 
 // ------------------------------------------------------------
-// Rejection toast - brief but readable, auto-dismissing
+// Rejection toast - brief but readable, auto-dismissing.
+// This is a floating overlay (see .rejectionToast in style.css) so it
+// never affects document flow - showing/hiding it never pushes the
+// guessed-words section up or down. Its on-screen duration is
+// host-configurable (Settings → "Show rejection message for").
 // ------------------------------------------------------------
 let lastShownRejectionAt = 0;
 let rejectionHideTimer = null;
@@ -445,14 +457,16 @@ function maybeShowRejection(g) {
   if (!g.lastRejection || g.lastRejection.at <= lastShownRejectionAt) return;
   lastShownRejectionAt = g.lastRejection.at;
 
+  const seconds = g.rejectionToastSeconds || 4;
+
   el.rejectionToast.textContent = "✗ " + g.lastRejection.word.toUpperCase() + " — " + g.lastRejection.reason;
   el.rejectionToast.hidden = false;
   el.rejectionToast.style.animation = "none";
   void el.rejectionToast.offsetWidth;
-  el.rejectionToast.style.animation = "";
+  el.rejectionToast.style.animation = "toast-flash " + seconds + "s ease forwards";
 
   clearTimeout(rejectionHideTimer);
-  rejectionHideTimer = setTimeout(() => { el.rejectionToast.hidden = true; }, 2400);
+  rejectionHideTimer = setTimeout(() => { el.rejectionToast.hidden = true; }, seconds * 1000);
 }
 
 // ------------------------------------------------------------

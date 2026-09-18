@@ -1,5 +1,12 @@
 # WORD500 — unlimited-guess deduction, live on TikTok
 
+> **Recent fixes:** auto-continue now always waits for the full win
+> celebration (winner → this round → all-time leaderboard) to finish
+> before starting the next round, and the guess-rejection message is now a
+> floating overlay (it no longer shifts the guessed-words section), shown
+> for a host-configurable number of seconds (Settings → "Guess rejection
+> message").
+
 This is a complete, ready-to-run web app. You don't need to write or
 edit any code. This document explains the rules and walks you through
 putting it online.

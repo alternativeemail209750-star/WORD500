@@ -143,6 +143,14 @@ const difficultyIndex = buildDifficultyIndex(ANSWER_WORDS);
 
 const DEFAULT_AUTO_CONTINUE_DELAY = 3;
 const DEFAULT_LEADERBOARD_SHOW_SECONDS = 3;
+const DEFAULT_REJECTION_TOAST_SECONDS = 4;
+// The win celebration always walks through 3 stages (winner, this-round
+// leaderboard, all-time leaderboard), each shown for leaderboardShowSeconds.
+// Auto-continue must never cut that celebration short, so when a round is
+// WON we add this celebration runtime on top of the configured delay (see
+// processGuess below). A "give up" / timeout loss has no celebration, so
+// it keeps using autoContinueDelaySeconds on its own (see giveUp below).
+const CELEBRATION_STAGE_COUNT = 3;
 
 const game = {
   mode: "test",
@@ -163,7 +171,8 @@ const game = {
   autoContinue: false,
   autoContinueDelaySeconds: DEFAULT_AUTO_CONTINUE_DELAY,
   autoContinueAt: null,
-  leaderboardShowSeconds: DEFAULT_LEADERBOARD_SHOW_SECONDS
+  leaderboardShowSeconds: DEFAULT_LEADERBOARD_SHOW_SECONDS,
+  rejectionToastSeconds: DEFAULT_REJECTION_TOAST_SECONDS
 };
 
 function clampWordLength(n) {
@@ -212,8 +221,13 @@ function processGuess(word, caller) {
     awardPoints(caller, 10);
   }
 
-  if (game.status !== "live" && game.autoContinue) {
-    game.autoContinueAt = Date.now() + game.autoContinueDelaySeconds * 1000;
+  if (game.status === "won" && game.autoContinue) {
+    // Wait out the full win celebration (winner → this round's leaderboard
+    // → all-time leaderboard, each shown for leaderboardShowSeconds) before
+    // even starting the configured auto-continue delay, so a new round
+    // never interrupts the all-time leaderboard window mid-display.
+    const celebrationSeconds = game.leaderboardShowSeconds * CELEBRATION_STAGE_COUNT;
+    game.autoContinueAt = Date.now() + (celebrationSeconds + game.autoContinueDelaySeconds) * 1000;
   }
 }
 
@@ -550,6 +564,7 @@ function buildStatePayload() {
       autoContinue: game.autoContinue,
       autoContinueDelaySeconds: game.autoContinueDelaySeconds,
       leaderboardShowSeconds: game.leaderboardShowSeconds,
+      rejectionToastSeconds: game.rejectionToastSeconds,
       autoContinueSecondsLeft: game.autoContinueAt ? Math.max(0, Math.ceil((game.autoContinueAt - Date.now()) / 1000)) : 0,
       minWordLength: MIN_WORD_LENGTH,
       maxWordLength: MAX_WORD_LENGTH
@@ -684,6 +699,12 @@ function handleClientAction(ws, msg) {
     case "set_leaderboard_show_seconds": {
       const v = Number(payload && payload.seconds);
       game.leaderboardShowSeconds = Number.isFinite(v) ? Math.min(30, Math.max(1, Math.round(v))) : DEFAULT_LEADERBOARD_SHOW_SECONDS;
+      broadcastState();
+      break;
+    }
+    case "set_rejection_toast_seconds": {
+      const v = Number(payload && payload.seconds);
+      game.rejectionToastSeconds = Number.isFinite(v) ? Math.min(30, Math.max(1, Math.round(v))) : DEFAULT_REJECTION_TOAST_SECONDS;
       broadcastState();
       break;
     }

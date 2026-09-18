@@ -189,10 +189,19 @@
 
       <div class="drawerSection">
         <h4>Win celebration</h4>
-        <p class="sectionNote">After a win, the leaderboard pops up automatically, then closes on its own.</p>
+        <p class="sectionNote">After a win, the leaderboard pops up automatically, then closes on its own. Auto-continue (above) always waits for this celebration to finish before starting the next round.</p>
         <div class="row">
           <label class="fieldLabel delayLabel">Show leaderboard for (seconds)</label>
           <input type="number" id="leaderboardShowInput" class="textInput selectNarrow" min="1" max="30" value="3" />
+        </div>
+      </div>
+
+      <div class="drawerSection">
+        <h4>Guess rejection message</h4>
+        <p class="sectionNote">Shown briefly whenever a guess conflicts with an earlier clue.</p>
+        <div class="row">
+          <label class="fieldLabel delayLabel">Show rejection message for (seconds)</label>
+          <input type="number" id="rejectionToastShowInput" class="textInput selectNarrow" min="1" max="30" value="4" />
         </div>
       </div>
 
