@@ -207,19 +207,14 @@ button { cursor: pointer; }
 }
 
 .countsCol { display: flex; flex-direction: row; gap: 3px; flex-shrink: 0; align-items: center; }
-.countsCol.tight { gap: 3px; }
-.countsCol.tight .countBadge { min-width: 20px; height: 18px; font-size: 10px; border-radius: 4px; padding: 0 3px; }
 .countBadge {
-  min-width: 30px;
-  height: 18px;
-  padding: 0 6px;
   border-radius: 5px;
+  padding: 0 3px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 11px;
 }
 .countBadge.green { background: rgba(22, 217, 118, 0.18); color: var(--success); }
 .countBadge.gold { background: rgba(255, 177, 0, 0.18); color: var(--gold); }

@@ -214,11 +214,32 @@ for (const row of KEYBOARD_ROWS) {
   }
   el.keyboard.appendChild(rowEl);
 }
-function applyKeyMetrics(metrics) {
+// The keyboard is 13 keys per row and lives in its own section - it
+// must size itself to ITS OWN available width, not just inherit the
+// guess-tile size (which is computed for up to 17 tiles sharing width
+// with the counts row - applying that directly here would overflow,
+// since 13 keys at that size is often wider than the whole screen).
+function computeKeyboardMetrics(preferredTileSize) {
+  const containerWidth = el.keyboard.clientWidth || el.keyboardSection.clientWidth || 320;
+  const columns = 13;
+  const gap = 4;
+  let sizeByWidth = Math.floor((containerWidth - gap * (columns - 1)) / columns);
+  sizeByWidth = Math.max(8, sizeByWidth);
+  const size = Math.max(8, Math.min(preferredTileSize, sizeByWidth));
+  const height = Math.round(size * 1.05);
+  const fontSize = Math.max(7, Math.round(size * 0.42));
+  return { size, height, fontSize, gap };
+}
+
+function applyKeyMetrics(preferredTileSize) {
+  const km = computeKeyboardMetrics(preferredTileSize);
+  el.keyboard.querySelectorAll(".keyRow").forEach((row) => {
+    row.style.gap = km.gap + "px";
+  });
   el.keyboard.querySelectorAll(".key").forEach((key) => {
-    key.style.width = metrics.tileSize + "px";
-    key.style.height = metrics.tileHeight + "px";
-    key.style.fontSize = metrics.fontSize + "px";
+    key.style.width = km.size + "px";
+    key.style.height = km.height + "px";
+    key.style.fontSize = km.fontSize + "px";
   });
 }
 
@@ -600,30 +621,39 @@ function computeAvailableTilesHeight() {
   return Math.max(80, viewportH - top - reserveBelow);
 }
 
-function computeTileMetrics(wordLength, rowCount) {
-  const containerWidth = el.tilesWrap.clientWidth || 320;
-  const hGap = 2;
-  // Counts are now a horizontal row of 3 badges beside the tiles
-  // (green, yellow, red), which needs more width than the old
-  // stacked column did.
-  const countsReserve = 70;
-  const usableWidth = Math.max(100, containerWidth - countsReserve);
-
-  // Preferred size: the old "as if it's a 17-letter word" baseline,
-  // doubled. This is what short/medium rounds render at.
+// Sizes a tile row so it always fits on one line, using the "as if
+// at least 17 letters" doubled baseline, clamped by whatever the
+// actual word length needs.
+function widthConstrainedTileSize(usableWidth, wordLength, hGap) {
   const baselineLength = 17;
   let baselineSize = Math.floor((usableWidth - hGap * (baselineLength - 1)) / baselineLength);
   baselineSize = Math.max(8, baselineSize) * 2;
   baselineSize = Math.min(90, baselineSize);
 
-  // Hard constraint: whatever the actual word length is, it must
-  // still fit on one line - this is what makes genuinely long rounds
-  // (16-20 letters) shrink back down even though short rounds get to
-  // use the doubled baseline above.
   let actualFitSize = Math.floor((usableWidth - hGap * (wordLength - 1)) / wordLength);
   actualFitSize = Math.max(8, actualFitSize);
 
-  let tileSizeByWidth = Math.min(baselineSize, actualFitSize);
+  return Math.min(baselineSize, actualFitSize);
+}
+
+function computeTileMetrics(wordLength, rowCount) {
+  const containerWidth = el.tilesWrap.clientWidth || 320;
+  const hGap = 2;
+
+  // Pass 1: rough estimate to bootstrap a font size, using a
+  // conservative guess for how wide the counts row will end up being.
+  let countsReserve = 70;
+  let tileSizeByWidth = widthConstrainedTileSize(Math.max(100, containerWidth - countsReserve), wordLength, hGap);
+  let fontSizeGuess = Math.max(7, Math.round(tileSizeByWidth * 0.42));
+
+  // Pass 2: the count badges use THIS SAME font size (matching the
+  // guessed letters, as requested) - so now that we know roughly what
+  // that font size will be, compute the counts row's real width and
+  // redo the fit. This is what lets everything auto-shrink together
+  // (badges included) to keep guesses on one line at any word length.
+  let badgeWidth = Math.max(20, Math.round(fontSizeGuess * 2.3));
+  countsReserve = badgeWidth * 3 + 3 * 2 + 8; // 3 badges + 2 small gaps + gap to the tiles
+  tileSizeByWidth = widthConstrainedTileSize(Math.max(100, containerWidth - countsReserve), wordLength, hGap);
 
   const availableHeight = computeAvailableTilesHeight();
   const vGap = 8;
@@ -635,7 +665,13 @@ function computeTileMetrics(wordLength, rowCount) {
   const tileSize = Math.max(8, Math.min(tileSizeByWidth, tileSizeByHeight));
   const tileHeight = Math.round(tileSize * 1.18);
   const fontSize = Math.max(7, Math.round(tileSize * 0.42));
-  return { tileSize, tileHeight, fontSize, gap: hGap, tight: true };
+
+  // Recompute badge dimensions from the FINAL font size, so the
+  // counts always visually match the guessed-letter font exactly.
+  badgeWidth = Math.max(20, Math.round(fontSize * 2.3));
+  const badgeHeight = Math.max(16, Math.round(tileSize * 0.62));
+
+  return { tileSize, tileHeight, fontSize, gap: hGap, badgeWidth, badgeHeight, badgeFontSize: fontSize };
 }
 
 function buildGuessBlock(guess, wordLength, metrics) {
@@ -665,11 +701,12 @@ function buildGuessBlock(guess, wordLength, metrics) {
 
   if (guess) {
     const countsCol = document.createElement("div");
-    countsCol.className = "countsCol" + (metrics.tight ? " tight" : "");
+    countsCol.className = "countsCol";
+    const badgeStyle = "width:" + metrics.badgeWidth + "px;height:" + metrics.badgeHeight + "px;font-size:" + metrics.badgeFontSize + "px;";
     countsCol.innerHTML =
-      '<span class="countBadge green">' + guess.counts.green + "</span>" +
-      '<span class="countBadge gold">' + guess.counts.yellow + "</span>" +
-      '<span class="countBadge red">' + guess.counts.red + "</span>";
+      '<span class="countBadge green" style="' + badgeStyle + '">' + guess.counts.green + "</span>" +
+      '<span class="countBadge gold" style="' + badgeStyle + '">' + guess.counts.yellow + "</span>" +
+      '<span class="countBadge red" style="' + badgeStyle + '">' + guess.counts.red + "</span>";
     block.appendChild(countsCol);
   }
 
@@ -686,7 +723,7 @@ function renderTiles(g) {
 
   const rowCount = g.guesses.length + (g.status === "live" ? 1 : 0);
   const metrics = computeTileMetrics(g.wordLength, rowCount);
-  applyKeyMetrics(metrics);
+  applyKeyMetrics(metrics.tileSize);
 
   if (g.status === "live") {
     el.tilesWrap.appendChild(buildGuessBlock(null, g.wordLength, metrics));
